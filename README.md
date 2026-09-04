@@ -152,6 +152,12 @@ Complete experimental traces are saved under ignored `runtime/evals/`, not publi
 
 ## Security and current limits
 
+An optional [inference-sharing gateway](docs/SHARING.md) now provides a separate, authenticated
+OpenAI-compatible text Chat Completions endpoint, including streaming, token usage and inference
+metadata. `pnpm sharing init` creates private configuration and individual keys; reusable Caddy,
+restricted SSH, and macOS service templates keep deployment details outside Git. This gateway
+does not expose the Agent/Memory APIs described below.
+
 This is a local prototype, not a publicly exposed multi-user gateway. User/session headers identify
 scope but do not authenticate callers; the native-tools token protects account-tool execution only.
 Add gateway authentication and tenant authorization before exposing any endpoint to a network.

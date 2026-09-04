@@ -14,3 +14,11 @@ models/
 runtime/
 data/
 *.log
+# Local deployments and credentials must never become reusable examples.
+sharing.local.json
+keys.json
+collaborator-keys.txt
+*.key
+*.pem
+*ed25519*
+deployment.local/

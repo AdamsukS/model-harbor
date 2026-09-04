@@ -8,6 +8,8 @@
     "node": ">=22.0.0 <23.0.0"
   },
   "scripts": {
+    "sharing": "node scripts/sharing.mjs",
+    "start:inference": "node dist/src/inference-gateway.js",
     "build": "tsc -p tsconfig.json && vite build",
     "build:web": "vite build",
     "dev": "tsx src/main.ts",
