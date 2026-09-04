@@ -75,8 +75,8 @@ SGLang 仅在以下检查全部通过后才能成为默认后端：
 
 - `models/`：本地模型快照，不纳入 Git。
 - `scripts/prepare.sh`：检查环境、创建 Python 3.12 虚拟环境、安装锁定依赖并下载模型。
-- `scripts/start-mlx.sh`：以前台方式启动默认 MLX-LM 服务。
-- `scripts/start-sglang.sh`：启动可选 SGLang/MLX 服务；未安装或不兼容时给出清晰错误。
+- `scripts/start-mlx.sh`：在后台启动默认 MLX-LM 服务，并记录 PID 与日志。
+- `scripts/start-sglang.sh`：在后台启动可选 SGLang/MLX 服务并记录 PID 与日志；未安装或不兼容时给出清晰错误。
 - `scripts/stop.sh`：仅停止由本项目启动并记录 PID 的服务。
 - `scripts/health.sh`：验证进程、模型列表和一次最小对话请求。
 - `scripts/smoke.sh`：验证非流式、流式、多轮、工具格式和 5 客户端请求。
