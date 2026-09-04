@@ -1,4 +1,9 @@
 .DS_Store
+.env
+.runtime/
+node_modules/
+dist/
+coverage/
 .pytest_cache/
 __pycache__/
 *.py[cod]
@@ -7,5 +12,5 @@ __pycache__/
 .worktrees/
 models/
 runtime/
+data/
 *.log
-

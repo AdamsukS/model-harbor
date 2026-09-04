@@ -1,0 +1,29 @@
+{
+  "name": "model-harbor",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Local-first multi-model Agent runtime using Hypha, Plasmod, and native inference backends.",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/main.ts",
+    "start": "node dist/main.js",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@codesoul-co/hypha-core": "1.0.1",
+    "@codesoul-co/hypha-domain": "1.0.1",
+    "@codesoul-co/hypha-memory": "1.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.1",
+    "tsx": "4.23.13",
+    "typescript": "5.9.3",
+    "vitest": "3.2.7"
+  },
+  "packageManager": "pnpm@11.19.0"
+}
