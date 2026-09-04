@@ -174,7 +174,7 @@ def run_smoke(base_url: str, concurrency: int = 5) -> SmokeReport:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Smoke-test a local Qwen service")
+    parser = argparse.ArgumentParser(description="Smoke-test a ModelHarbor backend")
     parser.add_argument("--base-url", default="http://127.0.0.1:8000/v1")
     parser.add_argument("--concurrency", type=int, default=5)
     args = parser.parse_args(argv)
@@ -185,4 +185,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

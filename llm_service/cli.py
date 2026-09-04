@@ -11,7 +11,7 @@ from llm_service.process import healthcheck, start_backend, stop_backend
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Manage the local Qwen3.5 service")
+    parser = argparse.ArgumentParser(description="Manage the ModelHarbor service")
     subcommands = parser.add_subparsers(dest="action", required=True)
 
     start = subcommands.add_parser("start")
@@ -43,4 +43,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

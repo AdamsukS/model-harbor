@@ -1,2 +1,1 @@
-"""Local Qwen3.5 serving control utilities."""
-
+"""Local inference service control utilities for ModelHarbor."""
