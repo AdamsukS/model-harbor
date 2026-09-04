@@ -100,8 +100,8 @@ curl http://127.0.0.1:8787/v1/chat/completions \
   }'
 ```
 
-Chat 已支持可选的 Hypha 治理只读工具：当前时间、Apple Calendar/Mail，以及配置 Key 后的网页搜索。
-详见[工具与本地授权](docs/TOOLS.md)。目前仍为非流式 Chat；MCP、完整 Hypha Production Harness、自动摘要以及
+Chat 已支持可选的 Hypha 治理只读工具：当前时间、Apple Calendar/Mail，以及免 Key 的 Exa MCP 网页搜索（免费档有限流）。
+详见[工具与本地授权](docs/TOOLS.md)。目前仍为非流式 Chat；通用 MCP 动态工具导入、完整 Hypha Production Harness、自动摘要以及
 直接 llama.cpp KV 实验会在后续逐步接入。
 
 ## 128K 与 KV Cache

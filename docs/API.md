@@ -157,6 +157,9 @@ returned by an API. `benchmark.toolTrace` contains Hypha execution events, and
 ### `GET /v1/tools`
 
 Returns tool names, modes and configuration status; no account contents or credentials.
+The default search entry includes `provider: "exa_mcp"` and `status: "configured_free_no_key"`.
+This is not a live health check. Optional Ollama search reports `configured` only with a key;
+disabled/key-missing search reports `not_configured` and is not exposed to the model.
 
 The bundled UI uses these same-origin endpoints. They are stable backend boundaries for future
 gateways; clients should not call Plasmod directly.

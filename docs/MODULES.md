@@ -23,6 +23,8 @@ The two source forks are pinned in `config/runtime-sources.json` and checked out
 | `src/service.ts` | HTTP validation, readiness, memory/inference orchestration, Bench APIs/static assets, OpenAI-compatible response, and shutdown. |
 | `src/main.ts` | Production composition and signal handling. |
 | `src/tool-runtime.ts` | Official Hypha ToolRegistry/GovernedToolRunner, native tool adapters, owner-token authorization, bounded Ollama tool loop. |
+| `src/mcp-search.ts`, `config/mcp.json` | Reviewed Exa MCP search binding, Hypha connection management, egress/result bounds, and connection cleanup. |
+| `scripts/check-web-search.ts` | Live model → Hypha → Exa MCP smoke check with local traces and memory writes disabled. |
 | `scripts/apple-tools.js` | Static read-only macOS JavaScript for Automation; arguments are data, never executable source. |
 | `scripts/eval-memory.ts` | Reproducible live-model recall-on/off and user-isolation probes; writes local evidence under runtime/evals. |
 

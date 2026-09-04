@@ -1,0 +1,21 @@
+{
+  "id": "exa",
+  "version": "1.0.0",
+  "displayName": "Exa free web search",
+  "mode": "remote",
+  "transport": {
+    "type": "streamable_http",
+    "endpoint": "https://mcp.exa.ai/mcp?tools=web_search_exa"
+  },
+  "initializationTimeoutMs": 5000,
+  "requestTimeoutMs": 12000,
+  "shutdownTimeoutMs": 1000,
+  "egressPolicy": {
+    "allowedHosts": ["mcp.exa.ai"],
+    "denyPrivateNetworks": true,
+    "requireTls": true,
+    "maxRedirects": 0,
+    "allowCrossOriginRedirects": false
+  },
+  "contentPolicy": { "maxToolResultBytes": 65536, "oversizeAction": "reject" }
+}

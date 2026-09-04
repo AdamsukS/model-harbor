@@ -14,6 +14,9 @@ importers:
       '@codesoul-co/hypha-domain':
         specifier: 1.0.1
         version: 1.0.1
+      '@codesoul-co/hypha-mcp':
+        specifier: 1.0.1
+        version: 1.0.1
       '@codesoul-co/hypha-memory':
         specifier: 1.0.1
         version: 1.0.1

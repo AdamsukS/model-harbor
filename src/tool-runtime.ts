@@ -3,10 +3,11 @@ import { randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { GovernedToolRunner, ToolRegistry, type ToolHandler, type ToolSpec } from '@codesoul-co/hypha-tools';
+import { GovernedToolRunner, MCPToolAdapter, ToolRegistry, type MCPToolInvocationPort, type ToolHandler, type ToolSpec } from '@codesoul-co/hypha-tools';
 import type { JsonSchema } from '@codesoul-co/hypha-core';
 import type { InferenceClient, InferenceMessage, InferenceResult, ToolDefinition } from './ollama-client';
 import type { MemoryScope } from './plasmod-client';
+import { loadExaSearchPort } from './mcp-search';
 
 const executeFile = promisify(execFile);
 export type ToolMode = 'off' | 'public' | 'local';
@@ -14,14 +15,22 @@ export class ToolBudgetError extends Error {}
 
 export class AgentTools {
   private readonly registry = new ToolRegistry();
-  constructor(private readonly options: { owner: string; token: string; searchKey: string; appleScript: string }) {
+  constructor(private readonly options: { owner: string; token: string; searchKey: string; appleScript: string; exa?: MCPToolInvocationPort }) {
     this.register('current_time', 'Read the current time in an IANA timezone.', {
       timezone: { type: 'string', maxLength: 80 },
     }, [], async (input) => {
       const timezone = (input as { timezone?: string }).timezone || 'Asia/Shanghai';
       return { utc: new Date().toISOString(), timezone, local: new Date().toLocaleString('sv-SE', { timeZone: timezone }) };
     });
-    if (options.searchKey) this.register('web_search', 'Search the public web. Never include private mail, calendar, memory or credentials in queries.', {
+    if (options.exa) this.registry.registerAdapter({
+      id: 'web_search', version: '1.0.0', source: 'mcp',
+      sourceRef: { serverId: 'exa', capabilityId: 'web_search_exa' },
+      description: 'Search the public web using Exa MCP and cite returned source URLs. Only use the exact user-approved query.',
+      inputSchema: { type: 'object', properties: { query: { type: 'string', minLength: 1, maxLength: 500 } }, required: ['query'], additionalProperties: false },
+      sideEffectLevel: 'read', permissionScope: ['tools.read'],
+      timeoutPolicy: { timeoutMs: 20_000, onTimeout: 'fail' }, retryPolicy: { maxAttempts: 1 },
+    }, new MCPToolAdapter('exa.web_search', 'exa', 'web_search_exa', options.exa));
+    else if (options.searchKey) this.register('web_search', 'Search the public web. Never include private mail, calendar, memory or credentials in queries.', {
       query: { type: 'string', minLength: 1, maxLength: 500 },
     }, ['query'], async (input, context) => {
       const response = await fetch('https://ollama.com/api/web_search', {
@@ -53,7 +62,8 @@ export class AgentTools {
   catalog() {
     return [
       { name: 'current_time', mode: 'public', status: 'available' },
-      { name: 'web_search', mode: 'public', status: this.options.searchKey ? 'configured' : 'missing_api_key' },
+      { name: 'web_search', mode: 'public', provider: this.options.exa ? 'exa_mcp' : this.options.searchKey ? 'ollama' : 'none',
+        status: this.options.exa ? 'configured_free_no_key' : this.options.searchKey ? 'configured' : 'not_configured' },
       { name: 'calendar_list', mode: 'local', status: process.platform === 'darwin' ? 'requires_token_and_macos_permission' : 'unsupported_platform' },
       { name: 'mail_list', mode: 'local', status: process.platform === 'darwin' ? 'requires_token_and_macos_permission' : 'unsupported_platform' },
     ];
@@ -134,6 +144,8 @@ export class AgentTools {
 }
 
 export async function createAgentTools(root: string): Promise<AgentTools> {
+  const provider = process.env.MODEL_HARBOR_WEB_SEARCH_PROVIDER || 'exa';
+  if (!['exa', 'ollama', 'off'].includes(provider)) throw new Error('MODEL_HARBOR_WEB_SEARCH_PROVIDER must be exa, ollama, or off.');
   const tokenPath = path.join(root, 'runtime/local-tools.token');
   await mkdir(path.dirname(tokenPath), { recursive: true });
   try { await writeFile(tokenPath, randomBytes(32).toString('hex'), { flag: 'wx', mode: 0o600 }); }
@@ -141,7 +153,8 @@ export async function createAgentTools(root: string): Promise<AgentTools> {
   return new AgentTools({
     owner: process.env.MODEL_HARBOR_LOCAL_TOOLS_USER || 'local-user-1',
     token: (await readFile(tokenPath, 'utf8')).trim(),
-    searchKey: process.env.OLLAMA_WEB_SEARCH_API_KEY || '',
+    searchKey: provider === 'ollama' ? process.env.OLLAMA_WEB_SEARCH_API_KEY || '' : '',
+    ...(provider === 'exa' ? { exa: await loadExaSearchPort(root) } : {}),
     appleScript: path.join(root, 'scripts/apple-tools.js'),
   });
 }

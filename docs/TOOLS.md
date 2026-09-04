@@ -7,7 +7,7 @@ not a mock MCP gateway. The loop implements [Ollama's tool calling protocol](htt
 | Tool | Provider | Availability |
 |---|---|---|
 | `current_time` | Node Intl / system clock | Public and local modes |
-| `web_search` | Ollama hosted web-search API | Public mode, API key and explicit approved query required |
+| `web_search` | Exa remote MCP (default); optional Ollama API | Public mode, explicit approved query; Exa free plan needs no key |
 | `calendar_list` | Apple Calendar via macOS automation | Local mode, owner token and OS consent required |
 | `mail_list` | Apple Mail inbox headers | Local mode, owner token and OS consent required |
 
@@ -34,15 +34,49 @@ stored locally by Plasmod.
 
 ## Public web search
 
-Set `OLLAMA_WEB_SEARCH_API_KEY` in ignored `.env`, then restart ModelHarbor. Obtain the key through
-the [official Ollama web-search setup](https://docs.ollama.com/capabilities/web-search).
-Inference remains local; only the user-approved search query is sent to `https://ollama.com/api/web_search`.
-The key is server-side only. With no key, `/v1/tools` reports `missing_api_key` and the search tool
-is not advertised to the model.
+The default is `MODEL_HARBOR_WEB_SEARCH_PROVIDER=exa`. No API key, account signup, Python process,
+or paid subscription is needed for the [Exa MCP free plan](https://exa.ai/docs/reference/exa-mcp).
+Free does not mean unlimited: the provider can rate-limit requests, and there is no production SLA
+or guaranteed five-user capacity. Rate limits/errors surface in the tool trace; there is no paid
+fallback, automatic signup, or automatic provider switching.
+
+`config/mcp.json` is a **Hypha MCPServerProfile**, not a Codex/global MCP configuration. It connects
+to `https://mcp.exa.ai/mcp?tools=web_search_exa` over Streamable HTTP using Hypha's published
+`MCPConnectionManager`, `SDKMCPConnectionSessionFactory`, and `MCPToolAdapter`. Only the reviewed
+search capability is mapped to the Agent's `web_search` tool; prompts, resources, page fetching,
+and other remotely advertised tools are not imported. The official MCP SDK handles negotiation
+and JSON/SSE responses; no custom protocol parser is used.
+
+In the Bench, expand **Tools & Memory controls**, select **Public: time / web**, enter the approved
+search query, then ask the Agent to search. `/v1/tools` reports `provider: exa_mcp` and
+`status: configured_free_no_key`; this describes configuration, not live provider health.
+Run `pnpm run tools:check-web` for an end-to-end model/MCP smoke check. The probe disables memory
+recall and writes, sends a public documentation query, and saves its complete trace under ignored
+`runtime/evals/web-search-*/trace.json`.
+
+Inference remains local. The approved query, fixed result count and MCP client/protocol metadata
+go to Exa; conversation history, user identity, recalled memories and credentials are not sent by
+the adapter. Each search uses a bounded short-lived connection with TLS/host restrictions, no
+redirects, and capped result size. Returned web text is untrusted evidence.
+
+To retain the earlier provider, set `MODEL_HARBOR_WEB_SEARCH_PROVIDER=ollama` and
+`OLLAMA_WEB_SEARCH_API_KEY` in ignored `.env`, then restart. See the
+[official Ollama setup](https://docs.ollama.com/capabilities/web-search). In that mode only the
+approved query is sent to Ollama's search API; a missing key leaves search unconfigured.
+Set the provider to `off` to disable search entirely.
 
 Supply `search_query` explicitly. The runner rejects any model-generated query that differs from
 it. Local/private mode never exposes the web-search tool. This prevents recalled mail/calendar
 content from being silently appended to an external query by the model.
+
+### Free alternatives considered (2026-09-04)
+
+- Exa hosted MCP: keyless free plan, selected for the current deployment; provider rate limits apply.
+- [Tavily MCP](https://docs.tavily.com/documentation/mcp): requires an account/API key;
+  its [free plan](https://www.tavily.com/pricing) lists 1,000 credits per month with no credit card.
+  Credits are not necessarily searches. Not installed or activated.
+- Third-party DuckDuckGo MCP scrapers: no search API subscription in some implementations, but
+  scraping can be throttled or challenged. Not installed; no CAPTCHA bypass or reliability claim.
 
 ## Bounds and traces
 

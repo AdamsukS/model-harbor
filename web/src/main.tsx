@@ -251,7 +251,7 @@ function App() {
             </label>}
             {toolMode === 'public' && <label>Approved public search query
               <input value={searchQuery} maxLength={500} onChange={(e) => setSearchQuery(e.target.value)} />
-              <small>Only this exact query may leave the device. Requires OLLAMA_WEB_SEARCH_API_KEY.</small>
+              <small>Only this exact query may leave the device. Exa MCP is free without a key, subject to provider limits.</small>
             </label>}
             <p>{toolCatalog.map((tool) => `${tool.name}: ${tool.status}`).join(' · ')}</p>
           </details>

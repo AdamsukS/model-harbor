@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { AgentTools } from '../src/tool-runtime';
 import type { InferenceClient, InferenceMessage } from '../src/ollama-client';
 
@@ -49,6 +49,23 @@ describe('governed Agent tools', () => {
     const { client, requests } = modelCalling('web_search', { query: 'private email data' });
     await tools.run(client, [{ role: 'user', content: 'Search' }], scope, 'public', 5000, 'approved public query');
     expect(JSON.parse(requests[1]!.at(-1)!.content).status).toBe('denied');
+  });
+
+  it('routes approved public search through the MCP adapter and records actual MCP events', async () => {
+    const invoke = vi.fn(async () => ({ content: [{ type: 'text', text: 'https://example.com' }] }));
+    const exaTools = new AgentTools({ owner: 'owner', token: 'x'.repeat(64), searchKey: '', appleScript: '',
+      exa: { invoke, health: async () => ({ status: 'healthy', checkedAt: new Date().toISOString() }) } });
+    const { client } = modelCalling('web_search', { query: 'public query' });
+    const result = await exaTools.run(client, [{ role: 'user', content: 'Search' }], scope, 'public', 5000, 'public query');
+    expect(invoke).toHaveBeenCalledWith(expect.objectContaining({ serverId: 'exa', capabilityId: 'web_search_exa', input: { query: 'public query' } }));
+    expect(result.trace).toEqual(expect.arrayContaining([expect.objectContaining({ type: 'mcp.call.completed' })]));
+    expect(exaTools.catalog()).toContainEqual(expect.objectContaining({ name: 'web_search', provider: 'exa_mcp', status: 'configured_free_no_key' }));
+    expect(exaTools.definitions('local').some((item) => item.function.name === 'web_search')).toBe(false);
+    for (const approved of ['', 'different query']) {
+      invoke.mockClear();
+      await exaTools.run(modelCalling('web_search', { query: 'public query' }).client, [{ role: 'user', content: 'Search' }], scope, 'public', 5000, approved);
+      expect(invoke).not.toHaveBeenCalled();
+    }
   });
 
   it('bounds models that keep requesting tools', async () => {
