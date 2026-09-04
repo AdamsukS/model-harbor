@@ -1,7 +1,8 @@
 # API reference
 
 ModelHarbor listens on `http://127.0.0.1:8787` by default. Phase one is local-only and does not
-provide TLS or authentication. Chat and memory operations require explicit user and Session scope.
+provide TLS or general user authentication. Native account tools separately require an owner token.
+Chat and memory operations require explicit user and Session scope.
 
 Errors use:
 
@@ -183,10 +184,12 @@ dependency health, and aggregate Plasmod metrics. It does not expose internal de
 
 | Status | Meaning |
 |---:|---|
-| `200` | Completed and, for Chat, persisted to Plasmod |
+| `200` | Completed; Chat persists its interaction unless `memory_write: false` |
 | `400` | Invalid JSON, scope, messages, query, or unsupported streaming |
+| `403` | Native tools requested without the correct owner and token |
 | `404` | Unknown route |
 | `413` | Request body exceeds 2 MiB |
+| `422` | Tool loop exceeded its step, call, or context budget |
 | `429` | Five-request queue or five-user admission boundary reached |
 | `503` | Ollama, model, or Plasmod unavailable |
 

@@ -121,6 +121,24 @@ describe('PlasmodClient', () => {
     expect(user.memories).toEqual(['allowed', 'old']);
   });
 
+  it('resolves a missing node tenant from its version and rejects unidentified memory', async () => {
+    const { tenant_id, ...nodeIdentity } = identity;
+    const server = await startTestServer((_request, response) => json(response, 200, {
+      nodes: [
+        { object_id: 'versioned', object_type: 'memory', properties: { ...nodeIdentity, content: 'versioned' } },
+        { object_id: 'unknown', object_type: 'memory', properties: { ...nodeIdentity, content: 'unknown' } },
+        { object_id: 'wrong-tenant', object_type: 'memory', properties: { ...identity, tenant_id: 'other', content: 'secret' } },
+      ],
+      versions: [{ object_id: 'versioned', snapshot: { tenant_id } }],
+    }));
+    cleanups.push(server.close);
+    const client = new PlasmodClient({ baseUrl: server.baseUrl, timeoutMs: 1000 });
+    const result = await client.query({ queryText: 'test', scope, topK: 5 });
+    expect(result.memories).toEqual(['versioned']);
+    expect(result.raw).toMatchObject({ scope_filtered_count: 2 });
+    expect(JSON.stringify(result.raw)).not.toContain('secret');
+  });
+
   it('ingests a strict Dynamic Event v0.4 interaction', async () => {
     const server = await startTestServer((_request, response) => {
       json(response, 200, { accepted: true, lsn: 4 });
