@@ -5,7 +5,7 @@
 ModelHarbor is a local-first, multi-model Agent runtime for personal hardware. The current
 `next` architecture uses:
 
-- [Hypha](https://github.com/AdamsukS/Hypha) for the versioned Agent and DomainPack contract;
+- [Hypha](https://github.com/AdamsukS/Hypha) for Agent/DomainPack contracts, governed tool execution, and MCP connections;
 - [Plasmod](https://github.com/AdamsukS/Plasmod) for scoped, durable Agent memory;
 - [Ollama](https://ollama.com/) for native Apple Silicon inference without Python;
 - a TypeScript gateway for bounded admission, context assembly, and an OpenAI-compatible API.
@@ -22,7 +22,8 @@ profile.
 - Inference model: `qwen3.5:9b-q4_K_M`, exposed locally as `qwen3.5:9b-128k`
 - Requested context: 128K tokens
 - Scheduling: one generation at a time, five total admitted requests, five admitted users maximum
-- Memory: Plasmod disk storage with scoped tenant/user/Session retrieval
+- Memory: Plasmod disk storage; session recall by default, opt-in same-user cross-session recall, or recall off
+- Tools: system time, free keyless Exa MCP search, and owner-protected Apple Calendar/Mail reads
 - Network scope: loopback only
 
 The existing `models/Qwen3.5-9B-4bit` MLX snapshot is preserved and ignored by Git. Ollama cannot
@@ -38,6 +39,7 @@ Client
        -> Plasmod recall :8080
        -> bounded context assembly
        -> Ollama inference :11434
+            <-> Hypha governed tools (Exa MCP / native read-only tools)
        -> Plasmod interaction ingest :8080
 ```
 
@@ -102,10 +104,64 @@ curl http://127.0.0.1:8787/v1/chat/completions \
   }'
 ```
 
-Chat supports optional bounded, read-only Hypha-governed tools: current time, Apple Calendar/Mail,
-and free keyless Exa MCP web search (provider limits apply). See [tool setup and safety](docs/TOOLS.md).
-Non-streaming chat remains the default. General dynamic MCP tool import, the complete Hypha production Harness,
-automatic memory summarization, and direct llama.cpp KV experiments will be added incrementally.
+## Tools and Memory controls
+
+In the Bench, expand **Tools & Memory controls**:
+
+1. Choose current-session recall, same-user cross-session recall, or recall off. Recall off still
+   writes completed turns and still includes visible chat history; it is not a clean experimental baseline.
+2. Select **Public: time / web**, enter an **Approved public search query**, then ask the Agent to
+   search. The Exa MCP free plan needs no key but is rate-limited; only the exact approved query is sent.
+3. For **Private: Apple Calendar / Mail**, use the configured owner and local token, and grant macOS
+   Automation permission. These tools only read event details and inbox headers; they do not send
+   mail or create events. Calendar recurrence expansion is incomplete.
+
+Tool traces and scoped recall evidence are available with each answer. The server defaults to tools
+off. Exa is the configured search provider, not an always-on background search service.
+See [tool setup and safety](docs/TOOLS.md), [MCP profile](config/mcp.json), and [API controls](docs/API.md).
+
+### Verification snapshot — 2026-09-04
+
+| Check | Result |
+|---|---|
+| Automated tests / TypeScript / production build | 59 tests passing; checks and build passing |
+| Time and Exa MCP search | Live local-model tool calls verified; search returned source URLs |
+| Apple Calendar / Mail | Adapters implemented; native checks timed out or reported unavailable/permission denied; account access not verified |
+| Memory required-fact tasks | Recall off: 0/8; same-user cross-session recall on: 8/8 |
+| Isolation negative controls after local mitigation | Other-user: 4/4; new-session default: 4/4 |
+
+The Memory experiment used real local inference and Plasmod, but **fictional workflow fixtures**
+(four tasks, two repetitions per mode), not private-account tasks or an official benchmark.
+The initial new-session isolation result was 0/4; local scope validation raised it to 4/4 without
+changing task prompts. Both runs are retained locally. This small sample does not establish
+general long-term memory quality or production security. See the [protocol and limitations](docs/MEMORY-EVALUATION.md).
+
+Re-run the checks against a running service:
+
+```bash
+pnpm test
+pnpm run typecheck
+pnpm run build
+pnpm run tools:check-web
+pnpm run tools:check-apple
+pnpm run eval:memory
+```
+
+The web probe disables memory writes; the Memory experiment creates isolated test-user records.
+Complete experimental traces are saved under ignored `runtime/evals/`, not published to Git.
+
+## Security and current limits
+
+This is a local prototype, not a publicly exposed multi-user gateway. User/session headers identify
+scope but do not authenticate callers; the native-tools token protects account-tool execution only.
+Add gateway authentication and tenant authorization before exposing any endpoint to a network.
+Search queries leave the device; inference, conversation history, and Memory stay local in the
+default deployment. Web results and recalled memories are untrusted evidence, not instructions.
+
+Chat is non-streaming. General dynamic MCP tool import, the complete Hypha production Harness,
+automatic memory summarization, write-capable mail/calendar actions, and direct llama.cpp KV
+experiments are not implemented. The currently supported tools are bounded to four model steps
+and six calls per request.
 
 ## 128K and KV cache
 
