@@ -122,6 +122,28 @@ def test_tools_are_forwarded_without_mutation(stub_server: str) -> None:
     assert StubHandler.bodies[-1]["tools"] == tools
 
 
+def test_extra_body_enables_stream_usage(stub_server: str) -> None:
+    list(
+        chat(
+            stub_server,
+            [{"role": "user", "content": "usage"}],
+            stream=True,
+            extra_body={"stream_options": {"include_usage": True}},
+        )
+    )
+
+    assert StubHandler.bodies[-1]["stream_options"] == {"include_usage": True}
+
+
+def test_extra_body_cannot_switch_away_from_local_model(stub_server: str) -> None:
+    with pytest.raises(ValueError, match="model"):
+        chat(
+            stub_server,
+            [{"role": "user", "content": "unsafe"}],
+            extra_body={"model": "remote/repository"},
+        )
+
+
 def test_http_errors_preserve_status_and_body(stub_server: str) -> None:
     with pytest.raises(ChatHTTPError) as caught:
         chat(stub_server, [{"role": "user", "content": "fail"}])

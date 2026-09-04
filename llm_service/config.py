@@ -84,7 +84,7 @@ class ServiceConfig:
         if port > 65535:
             raise ValueError("QWEN_PORT must be at most 65535")
 
-        cache_bytes = values.get("QWEN_PROMPT_CACHE_BYTES", "2GB")
+        cache_bytes = values.get("QWEN_PROMPT_CACHE_BYTES", "1200MB")
         if not SIZE_PATTERN.fullmatch(cache_bytes):
             raise ValueError("QWEN_PROMPT_CACHE_BYTES must look like 2GB or 512MB")
 
@@ -102,7 +102,7 @@ class ServiceConfig:
             ),
             runtime_dir=_resolve_under_root(root, values.get("QWEN_RUNTIME_DIR", "runtime")),
             prompt_cache_bytes=cache_bytes.upper(),
-            prompt_cache_size=_positive_int(values, "QWEN_PROMPT_CACHE_SIZE", 5),
+            prompt_cache_size=_positive_int(values, "QWEN_PROMPT_CACHE_SIZE", 1),
             prompt_concurrency=_positive_int(values, "QWEN_PROMPT_CONCURRENCY", 1),
             decode_concurrency=_positive_int(values, "QWEN_DECODE_CONCURRENCY", 1),
             prefill_step_size=_positive_int(values, "QWEN_PREFILL_STEP_SIZE", 2048),

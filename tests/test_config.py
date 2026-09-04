@@ -13,8 +13,8 @@ def test_defaults_are_local_and_memory_bounded(tmp_path: Path) -> None:
     assert cfg.model_id == "mlx-community/Qwen3.5-9B-4bit"
     assert cfg.model_dir == tmp_path / "models/Qwen3.5-9B-4bit"
     assert cfg.runtime_dir == tmp_path / "runtime"
-    assert cfg.prompt_cache_bytes == "2GB"
-    assert cfg.prompt_cache_size == 5
+    assert cfg.prompt_cache_bytes == "1200MB"
+    assert cfg.prompt_cache_size == 1
     assert cfg.prompt_concurrency == 1
     assert cfg.decode_concurrency == 1
 

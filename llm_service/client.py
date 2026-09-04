@@ -70,6 +70,7 @@ def chat(
     max_tokens: int = 64,
     enable_thinking: bool = False,
     timeout: float = 300,
+    extra_body: dict[str, Any] | None = None,
 ) -> dict[str, Any] | Iterator[dict[str, Any]]:
     """Send a chat request while pinning MLX-LM to its loaded local model."""
     payload: dict[str, Any] = {
@@ -81,6 +82,12 @@ def chat(
     }
     if tools:
         payload["tools"] = tools
+    if extra_body:
+        protected = {"model", "messages"}.intersection(extra_body)
+        if protected:
+            names = ", ".join(sorted(protected))
+            raise ValueError(f"extra_body cannot override protected fields: {names}")
+        payload.update(extra_body)
     request = _request(payload, base_url)
     if stream:
         return _stream_response(request, timeout)

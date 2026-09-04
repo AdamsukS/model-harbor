@@ -17,7 +17,7 @@
 - Runtime Python is exactly CPython 3.12.13 in project-local virtual environments.
 - Default endpoint is `http://127.0.0.1:8000/v1` and must not bind externally.
 - Default prefill and decode concurrency are both 1; five clients may wait on the backend queue.
-- Default prompt cache holds at most five entries and at most 2 GiB.
+- Default prompt cache holds one long-prefix entry and at most 1200 MB. This was reduced from the planned five entries/2 GiB after the 32K probe crossed the 1 GiB swap-growth safety limit; five clients still queue independently of retained cache entries.
 - Text and tool calling are in scope; image input is out of scope.
 - 32K, 64K, and 128K context/cache tests run in that order and stop escalating after memory instability.
 - SGLang is optional and cannot block delivery of the MLX-LM baseline.
@@ -48,8 +48,8 @@ def test_defaults_are_local_and_memory_bounded(tmp_path):
     cfg = ServiceConfig.load(tmp_path, {})
     assert cfg.host == "127.0.0.1"
     assert cfg.port == 8000
-    assert cfg.prompt_cache_bytes == "2GB"
-    assert cfg.prompt_cache_size == 5
+    assert cfg.prompt_cache_bytes == "1200MB"
+    assert cfg.prompt_cache_size == 1
     assert cfg.prompt_concurrency == 1
     assert cfg.decode_concurrency == 1
 
@@ -73,8 +73,8 @@ class ServiceConfig:
     host: str = "127.0.0.1"
     port: int = 8000
     model_id: str = "mlx-community/Qwen3.5-9B-4bit"
-    prompt_cache_bytes: str = "2GB"
-    prompt_cache_size: int = 5
+    prompt_cache_bytes: str = "1200MB"
+    prompt_cache_size: int = 1
     prompt_concurrency: int = 1
     decode_concurrency: int = 1
     max_tokens: int = 2048
@@ -87,8 +87,8 @@ class ServiceConfig:
             root=root.resolve(),
             host=values.get("QWEN_HOST", "127.0.0.1"),
             port=int(values.get("QWEN_PORT", "8000")),
-            prompt_cache_bytes=values.get("QWEN_PROMPT_CACHE_BYTES", "2GB"),
-            prompt_cache_size=int(values.get("QWEN_PROMPT_CACHE_SIZE", "5")),
+            prompt_cache_bytes=values.get("QWEN_PROMPT_CACHE_BYTES", "1200MB"),
+            prompt_cache_size=int(values.get("QWEN_PROMPT_CACHE_SIZE", "1")),
             prompt_concurrency=int(values.get("QWEN_PROMPT_CONCURRENCY", "1")),
             decode_concurrency=int(values.get("QWEN_DECODE_CONCURRENCY", "1")),
         )
@@ -217,8 +217,8 @@ def test_mlx_command_exposes_cache_controls(config):
     assert cmd[:2] == [str(config.root / ".venv/bin/mlx_lm.server"), "--model"]
     assert pair(cmd, "--decode-concurrency") == "1"
     assert pair(cmd, "--prompt-concurrency") == "1"
-    assert pair(cmd, "--prompt-cache-size") == "5"
-    assert pair(cmd, "--prompt-cache-bytes") == "2GB"
+    assert pair(cmd, "--prompt-cache-size") == "1"
+    assert pair(cmd, "--prompt-cache-bytes") == "1200MB"
 
 def test_stop_refuses_unrelated_pid(config, monkeypatch):
     write_pid(config, 4242, backend="mlx")
@@ -235,7 +235,7 @@ Expected: FAIL because lifecycle functions do not exist.
 
 - [ ] **Step 3: Implement command construction and safe lifecycle**
 
-The MLX command must include the local model path, loopback host, port 8000, `--decode-concurrency 1`, `--prompt-concurrency 1`, `--prefill-step-size 2048`, `--prompt-cache-size 5`, `--prompt-cache-bytes 2GB`, `--max-tokens 2048`, and `--chat-template-args '{"enable_thinking":true}'`.
+The MLX command must include the local model path, loopback host, port 8000, `--decode-concurrency 1`, `--prompt-concurrency 1`, `--prefill-step-size 2048`, `--prompt-cache-size 1`, `--prompt-cache-bytes 1200MB`, `--max-tokens 2048`, and `--chat-template-args '{"enable_thinking":true}'`.
 
 Start uses `subprocess.Popen(cmd, stdout=log_file, stderr=subprocess.STDOUT, start_new_session=True)` and writes PID only after the process remains alive. Stop reads only the project PID file, checks the command contains both `mlx_lm.server` and the resolved model path, sends `SIGTERM`, waits up to 15 seconds, and never sends a signal when validation fails.
 

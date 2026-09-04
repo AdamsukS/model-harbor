@@ -11,6 +11,7 @@ from llm_service.process import (
     mlx_environment,
     start_backend,
     stop_backend,
+    wait_for_port,
     write_pid,
 )
 
@@ -33,8 +34,8 @@ def test_mlx_command_exposes_cache_controls(config: ServiceConfig) -> None:
     assert pair(command, "--port") == "8000"
     assert pair(command, "--decode-concurrency") == "1"
     assert pair(command, "--prompt-concurrency") == "1"
-    assert pair(command, "--prompt-cache-size") == "5"
-    assert pair(command, "--prompt-cache-bytes") == "2GB"
+    assert pair(command, "--prompt-cache-size") == "1"
+    assert pair(command, "--prompt-cache-bytes") == "1200MB"
     assert pair(command, "--chat-template-args") == '{"enable_thinking":true}'
 
 
@@ -124,3 +125,28 @@ def test_mlx_environment_forces_offline_model_loading(config: ServiceConfig) -> 
     assert environment["TRANSFORMERS_OFFLINE"] == "1"
     assert environment["PYTHONPATH"] == str(config.root)
     assert environment["PATH"] == "/bin"
+
+
+def test_wait_for_port_retries_until_listener_is_ready() -> None:
+    attempts = 0
+
+    class FakeSocket:
+        def close(self) -> None:
+            return
+
+    def connector(address: tuple[str, int], timeout: float) -> FakeSocket:
+        nonlocal attempts
+        attempts += 1
+        if attempts < 3:
+            raise ConnectionRefusedError()
+        return FakeSocket()
+
+    wait_for_port(
+        "127.0.0.1",
+        8000,
+        timeout=1,
+        interval=0,
+        connector=connector,
+    )
+
+    assert attempts == 3

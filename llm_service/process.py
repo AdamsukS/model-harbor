@@ -6,9 +6,11 @@ import json
 import os
 from pathlib import Path
 import signal
+import socket
 import subprocess
 import time
-from typing import Literal
+from collections.abc import Callable
+from typing import Any, Literal
 from urllib.request import Request, urlopen
 
 from llm_service.config import ServiceConfig
@@ -96,6 +98,28 @@ def process_command(pid: int) -> str | None:
     return command if result.returncode == 0 and command else None
 
 
+def wait_for_port(
+    host: str,
+    port: int,
+    *,
+    timeout: float = 30,
+    interval: float = 0.2,
+    connector: Callable[[tuple[str, int], float], Any] = socket.create_connection,
+) -> None:
+    """Wait until the backend listener accepts a TCP connection."""
+    deadline = time.monotonic() + timeout
+    last_error: OSError | None = None
+    while time.monotonic() < deadline:
+        try:
+            connection = connector((host, port), min(interval + 0.1, 1))
+            connection.close()
+            return
+        except OSError as exc:
+            last_error = exc
+            time.sleep(interval)
+    raise TimeoutError(f"{host}:{port} was not ready within {timeout:g}s") from last_error
+
+
 def start_backend(backend: BackendName, config: ServiceConfig) -> int:
     """Start a managed backend in the background and return its PID."""
     if backend != "mlx":
@@ -129,6 +153,12 @@ def start_backend(backend: BackendName, config: ServiceConfig) -> int:
     if child.poll() is not None:
         tail = log_path.read_text(encoding="utf-8", errors="replace")[-4000:]
         raise RuntimeError(f"{backend} backend exited during startup:\n{tail}")
+    try:
+        wait_for_port(config.host, config.port)
+    except TimeoutError:
+        child.terminate()
+        child.wait(timeout=15)
+        raise
     write_pid(config, child.pid, backend=backend, command=command)
     return child.pid
 
