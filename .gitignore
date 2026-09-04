@@ -1,0 +1,11 @@
+.DS_Store
+.pytest_cache/
+__pycache__/
+*.py[cod]
+.venv/
+.venv-*/
+.worktrees/
+models/
+runtime/
+*.log
+

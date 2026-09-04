@@ -1,0 +1,4 @@
+huggingface-hub==1.29.0
+mlx-lm==0.31.3
+psutil==7.2.2
+
