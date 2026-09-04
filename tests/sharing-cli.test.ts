@@ -37,6 +37,21 @@ test('sharing setup is repeatable, keeps secrets private, validates templates, a
     }
     const configPath = join(state, 'sharing.local.json');
     const config = JSON.parse(readFileSync(configPath, 'utf8'));
+    config.domain = 'inference.example.net';
+    config.model = 'another-model';
+    config.maxTokens = 512;
+    writeFileSync(configPath, JSON.stringify(config));
+    const handoff = cli('handoff');
+    expect(handoff.status, handoff.stderr).toBe(0);
+    const guidePath = join(state, 'client-guide.local.md');
+    const guide = readFileSync(guidePath, 'utf8');
+    expect(guide).toContain('https://inference.example.net/v1');
+    expect(guide).toContain('another-model');
+    expect(guide).toContain('默认 `512`');
+    expect(guide).not.toMatch(/\{\{|203\.0\.113\.10|modelharbor-tunnel|sk-mh-/);
+    expect(statSync(guidePath).mode & 0o777).toBe(0o600);
+    expect(handoff.stdout).not.toContain(config.domain);
+    expect(guide).not.toContain(readFileSync(join(state, 'collaborator-1.key'), 'utf8').trim());
     config.remoteBind = '0.0.0.0';
     writeFileSync(configPath, JSON.stringify(config));
     expect(cli('render').status).toBe(1);

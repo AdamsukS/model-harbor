@@ -22,6 +22,8 @@ The two source forks are pinned in `config/runtime-sources.json` and checked out
 | `src/dependency-error.ts` | Timeouts, JSON/status normalization, and dependency error classification. |
 | `src/service.ts` | HTTP validation, readiness, memory/inference orchestration, Bench APIs/static assets, OpenAI-compatible response, and shutdown. |
 | `src/main.ts` | Production composition and signal handling. |
+| `src/inference-gateway.ts` | Separate authenticated text inference endpoint; bounded admission, OpenAI/SSE envelopes, backend usage and inference metadata. |
+| `scripts/sharing.mjs`, `config/sharing.example.json` | Private deployment configuration, key lifecycle, Caddy/SSH/service rendering, and credential-free client handoff documents. No cloud-provider API dependencies. |
 | `src/tool-runtime.ts` | Official Hypha ToolRegistry/GovernedToolRunner, native tool adapters, owner-token authorization, bounded Ollama tool loop. |
 | `src/mcp-search.ts`, `config/mcp.json` | Reviewed Exa MCP search binding, Hypha connection management, egress/result bounds, and connection cleanup. |
 | `scripts/check-web-search.ts` | Live model → Hypha → Exa MCP smoke check with local traces and memory writes disabled. |
@@ -65,6 +67,13 @@ state are disposable acceleration layers. Startup replays the retained WAL throu
 official admin endpoint so its in-process TF-IDF retrieval projection is rebuilt after a restart.
 
 ## Inference and KV extension point
+
+The optional sharing gateway has a separate boundary: an owner-configured Ollama HTTP origin and
+model name. Server address, DNS name, SSH listener, and local port are private configuration values.
+Moving between cloud providers changes these values and the external network/DNS setup, not the API
+contract. Replacing Ollama requires validating the forwarded parameter subset, token usage and SSE
+behavior; changing `upstream` alone is not evidence of compatibility. Public Agent routes would
+additionally need authenticated tenant/session authorization before being added to the allowlist.
 
 `InferenceClient` has `health()` and `chat()` operations. The service does not depend directly on
 Ollama response types outside `src/ollama-client.ts`. A future llama.cpp adapter can implement the

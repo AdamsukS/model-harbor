@@ -1,5 +1,11 @@
 # Operations guide
 
+This page covers the **local Agent runtime**. For the optional public inference gateway, use
+[provider-independent deployment and migration](DEPLOYMENT.md) and the
+[sharing operations guide](SHARING.md#limits-and-private-operations).
+`pnpm start` / `pnpm stop` manage the Agent runtime's processes; the separately installed sharing
+LaunchAgents have their own lifecycle. Stopping the backend can make a still-running sharing gateway unavailable.
+
 ## Paths
 
 | Path | Contents | Git tracked |

@@ -2,6 +2,10 @@
 
 [简体中文](README.zh-CN.md)
 
+**Using an existing service?** Start with the [shared inference API guide](docs/INFERENCE_API.md).
+**Deploying your own?** See [deployment and migration](docs/DEPLOYMENT.md), or the
+[English sharing guide](docs/SHARING.md). [All documentation](docs/README.md).
+
 ModelHarbor is a local-first, multi-model Agent runtime for personal hardware. The current
 `next` architecture uses:
 
@@ -17,14 +21,15 @@ profile.
 
 - Default branch: `next` (TypeScript + Go + native inference, no Python runtime)
 - Previous baseline: `main` (MLX-LM/Python)
-- API: `http://127.0.0.1:8787/v1`
+- Local Agent API: `http://127.0.0.1:8787/v1`
+- Optional shared inference: loopback gateway on 8788, with a separately configured HTTPS Base URL and personal keys
 - Agent Bench: `http://127.0.0.1:8787`
 - Inference model: `qwen3.5:9b-q4_K_M`, exposed locally as `qwen3.5:9b-128k`
 - Requested context: 128K tokens
 - Scheduling: one generation at a time, five total admitted requests, five admitted users maximum
 - Memory: Plasmod disk storage; session recall by default, opt-in same-user cross-session recall, or recall off
 - Tools: system time, free keyless Exa MCP search, and owner-protected Apple Calendar/Mail reads
-- Network scope: loopback only
+- Network scope: Agent and backend stay on loopback; optional authenticated inference sharing uses HTTPS + SSH
 
 The existing `models/Qwen3.5-9B-4bit` MLX snapshot is preserved and ignored by Git. Ollama cannot
 consume that directory directly, so the Ollama/GGUF profile is downloaded separately.
@@ -88,7 +93,7 @@ pnpm stop
 
 This preserves models, memory data, fork checkouts, and the older MLX environments.
 
-## Request example
+## Request example (local Agent)
 
 Every scoped operation requires `X-User-ID` and `X-Session-ID`:
 
@@ -158,13 +163,13 @@ metadata. `pnpm sharing init` creates private configuration and individual keys;
 restricted SSH, and macOS service templates keep deployment details outside Git. This gateway
 does not expose the Agent/Memory APIs described below.
 
-This is a local prototype, not a publicly exposed multi-user gateway. User/session headers identify
+The Agent/Memory service remains a local prototype. User/session headers identify
 scope but do not authenticate callers; the native-tools token protects account-tool execution only.
-Add gateway authentication and tenant authorization before exposing any endpoint to a network.
+Add gateway authentication and tenant authorization before exposing these Agent endpoints to a network.
 Search queries leave the device; inference, conversation history, and Memory stay local in the
 default deployment. Web results and recalled memories are untrusted evidence, not instructions.
 
-Chat is non-streaming. General dynamic MCP tool import, the complete Hypha production Harness,
+Agent chat is non-streaming; the separate inference-sharing endpoint supports streaming. General dynamic MCP tool import, the complete Hypha production Harness,
 automatic memory summarization, write-capable mail/calendar actions, and direct llama.cpp KV
 experiments are not implemented. The currently supported tools are bounded to four model steps
 and six calls per request.
@@ -184,7 +189,11 @@ prefix, and KV-cache experiments.
 
 ## Documentation
 
-- [API reference](docs/API.md)
+- [Documentation index](docs/README.md)
+- [Shared inference API](docs/INFERENCE_API.md)
+- [Provider-independent deployment and migration](docs/DEPLOYMENT.md)
+- [Inference sharing configuration and operations](docs/SHARING.md)
+- [Local Agent API reference](docs/API.md)
 - [Modules and maintenance](docs/MODULES.md)
 - [Operations guide](docs/OPERATIONS.md)
 - [Tools and local authorization](docs/TOOLS.md)

@@ -2,6 +2,9 @@
 
 [English](README.md)
 
+**调用已有服务：**[共享推理 API 指南](docs/INFERENCE_API.md)。
+**自己部署或迁移：**[通用部署指南](docs/DEPLOYMENT.md)。[完整文档导航](docs/README.md)。
+
 ModelHarbor 是面向个人硬件的本地优先、多模型 Agent 运行服务。当前 `next` 架构使用：
 
 - [Hypha](https://github.com/AdamsukS/Hypha) 管理 Agent/DomainPack 合约、工具治理与 MCP 连接；
@@ -15,14 +18,15 @@ ModelHarbor 是面向个人硬件的本地优先、多模型 Agent 运行服务�
 
 - 默认分支：`next`（TypeScript + Go + 原生推理，不使用 Python 运行时）
 - 旧版基线：`main`（MLX-LM/Python）
-- API：`http://127.0.0.1:8787/v1`
+- 本地 Agent API：`http://127.0.0.1:8787/v1`
+- 可选共享推理：8788 回环网关，通过单独配置的 HTTPS Base URL 和个人 Key 接入
 - Agent Bench：`http://127.0.0.1:8787`
 - 推理模型：`qwen3.5:9b-q4_K_M`，本地配置名为 `qwen3.5:9b-128k`
 - 请求上下文：128K Token
 - 调度：同时只执行一个生成；最多接纳 5 个请求、5 个用户
 - Memory：Plasmod 磁盘存储；默认当前会话召回，可选同用户跨会话召回或关闭召回
 - 工具：系统时间、免 Key 的 Exa MCP 搜索，以及所有者令牌保护的 Apple Calendar/Mail 只读工具
-- 网络范围：仅本机回环地址
+- 网络范围：Agent 和后端仅监听本机回环；可选的鉴权推理入口通过 HTTPS + SSH 对外共享
 
 已有的 `models/Qwen3.5-9B-4bit` MLX 模型仍保留并被 Git 忽略。Ollama 不能直接读取该
 目录，因此会额外下载 Ollama/GGUF 格式的模型。
@@ -86,7 +90,7 @@ pnpm stop
 
 该命令不会删除模型、Memory 数据、fork checkout 或旧 MLX 环境。
 
-## 调用示例
+## 调用示例（本地 Agent）
 
 Chat 和 Memory 请求必须带 `X-User-ID` 与 `X-Session-ID`：
 
@@ -153,12 +157,12 @@ Chat Completions，支持流式输出、token 用量和推理参数/耗时元数
 `pnpm sharing init` 生成本地私有配置和独立 Key，配套 Caddy、受限 SSH 与 macOS 服务模板。
 部署信息和密钥不进入 Git；该入口不开放下面所述的 Agent 和记忆接口。
 
-当前是本地原型，不是可直接公开部署的多用户网关。用户/会话请求头仅标识作用域，不能认证
-调用者；本机工具令牌只保护账户工具执行。对外开放任何端点前，必须增加网关身份认证和租户
+Agent/Memory 服务仍是本地原型。用户/会话请求头仅标识作用域，不能认证
+调用者；本机工具令牌只保护账户工具执行。对外开放这些 Agent 端点前，必须增加网关身份认证和租户
 授权。搜索词会发送到外部提供方；默认部署的推理、对话历史与 Memory 保留在本地。网页结果
 和召回内容都是不可信证据，不应被当作指令执行。
 
-Chat 仍为非流式。通用 MCP 动态工具导入、完整 Hypha Production Harness、自动 Memory 摘要、
+Agent Chat 仍为非流式，独立的共享推理接口支持流式输出。通用 MCP 动态工具导入、完整 Hypha Production Harness、自动 Memory 摘要、
 日历/邮件写操作，以及直接 llama.cpp KV 实验尚未实现。当前工具请求最多四轮模型推理、
 六次工具调用。
 
@@ -175,7 +179,11 @@ Ollama 模型配置请求 `131072` Token。启动参数启用 Flash Attention、
 
 ## 文档
 
-- [API 文档](docs/API.md)
+- [文档导航](docs/README.md)
+- [共享推理 API 使用指南](docs/INFERENCE_API.md)
+- [通用部署与迁移指南](docs/DEPLOYMENT.md)
+- [共享配置与维护详解](docs/SHARING.md)
+- [本地 Agent API](docs/API.md)
 - [模块与维护](docs/MODULES.md)
 - [运行维护指南](docs/OPERATIONS.md)
 - [工具与本地授权](docs/TOOLS.md)

@@ -1,4 +1,16 @@
-# API reference
+# Local Agent API reference
+
+**This page describes the local Agent/Memory service on port 8787.**
+If you received a public Base URL and personal API key, use the
+[shared inference API guide](INFERENCE_API.md) instead. See [the documentation index](README.md)
+and [deployment guide](DEPLOYMENT.md) for the full project entry points.
+
+| Interface | Authentication / scope | Chat behavior |
+| --- | --- | --- |
+| Shared inference (local gateway default 8788, public HTTPS via tunnel) | Personal Bearer key; no user/session headers required | Text inference, streaming, usage, `inference` metadata; no durable memory or tool execution |
+| Local Agent (default 8787, this page) | User/session headers identify scope but are not public authentication; native tools have a separate owner token | Non-streaming chat, scoped memory and governed tools; `benchmark` metadata |
+
+The identical `/v1/chat/completions` path does not make these two service contracts interchangeable.
 
 ModelHarbor listens on `http://127.0.0.1:8787` by default. Phase one is local-only and does not
 provide TLS or general user authentication. Native account tools separately require an owner token.

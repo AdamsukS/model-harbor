@@ -22,3 +22,4 @@ collaborator-keys.txt
 *.pem
 *ed25519*
 deployment.local/
+*.local.md

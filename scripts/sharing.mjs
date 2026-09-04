@@ -185,6 +185,16 @@ try {
     keys.filter(key => key.user === process.argv[3]).forEach(key => { key.enabled = false; });
     saveJSON(registryFile, keys);
     console.log('Key revoked for subsequent requests.');
+  } else if (command === 'handoff') {
+    const c = config();
+    let guide = readFileSync(join(root, 'docs/templates/CLIENT_HANDOFF.md'), 'utf8');
+    for (const [name, value] of Object.entries({ BASE_URL: `https://${c.domain}/v1`, MODEL: c.model,
+      MAX_TOKENS: c.maxTokens, DEFAULT_TOKENS: Math.min(1024, c.maxTokens) })) {
+      guide = guide.replaceAll(`{{${name}}}`, String(value));
+    }
+    const output = join(state, 'client-guide.local.md');
+    privateWrite(output, guide);
+    console.log(`Client guide saved to ${output}. Keys are not included; deliver each key separately.`);
   } else if (command === 'render') render();
   else if (command === 'install-macos') {
     if (process.platform !== 'darwin') throw new Error('install-macos requires macOS.');
@@ -216,7 +226,7 @@ try {
     console.log(`State: ${state}`);
     console.table(loadKeys().map(({ user, enabled }) => ({ user, enabled })));
   } else {
-    console.log('Usage: pnpm sharing init | render | install-macos | key-add USER | key-revoke USER | status');
+    console.log('Usage: pnpm sharing init | render | install-macos | handoff | key-add USER | key-revoke USER | status');
     console.log('Optional INFERENCE_STATE_DIR overrides the private state directory. See docs/SHARING.md.');
     if (command !== 'help') process.exitCode = 1;
   }

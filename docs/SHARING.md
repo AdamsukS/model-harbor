@@ -2,6 +2,10 @@
 
 [中文快速说明](#中文快速说明)
 
+For collaborators using an existing service, see the [inference API reference](INFERENCE_API.md).
+For operators, see [provider-independent deployment and migration](DEPLOYMENT.md).
+This design needs public DNS, HTTPS and SSH, not an account or SDK from any particular cloud provider.
+
 This optional gateway exposes a local Ollama model through **OpenAI-compatible Chat Completions**.
 It supports `GET /v1/models`, text `POST /v1/chat/completions`, SSE streaming, and function-call
 messages. It does not execute tools or expose the Agent UI, memory, model-management endpoints,
@@ -23,7 +27,7 @@ Authorization logging on the public reverse proxy.
 ## 1. Prepare the local backend and private configuration
 
 Install the repository's Node.js 22 / pnpm requirements, install Ollama, and load a model.
-The regular `pnpm start` workflow prepares the configured runtime; alternatively manage Ollama
+The regular `pnpm run runtime:prepare` then `pnpm start` workflow prepares and starts the configured runtime; alternatively manage Ollama
 independently and use any model already listed by its `/v1/models` endpoint.
 
 ```bash
@@ -128,6 +132,10 @@ A Mac must remain powered, awake, connected, and logged in. FileVault unlock and
 ## Client usage
 
 Only distribute the URL, model name, and that person's key. No user/session headers are needed.
+
+Run `pnpm sharing handoff` to generate a private `client-guide.local.md` containing this instance's
+API URL, model and limits, with no API key or SSH/server inventory. Share that guide privately and
+deliver each key separately. The [source template](templates/CLIENT_HANDOFF.md) contains placeholders only.
 
 ```python
 import os
