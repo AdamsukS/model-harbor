@@ -2,7 +2,7 @@
   "name": "model-harbor",
   "version": "0.2.0",
   "private": true,
-  "description": "Local-first multi-model Agent runtime using Hypha, Plasmod, and native inference backends.",
+  "description": "Local-first Agent runtime and inference sharing with an OpenAI-compatible API, streaming, token usage, and cloud-independent HTTPS/SSH deployment.",
   "license": "Apache-2.0",
   "engines": {
     "node": ">=22.0.0 <23.0.0"

@@ -6,8 +6,12 @@
 **Deploying your own?** See [deployment and migration](docs/DEPLOYMENT.md), or the
 [English sharing guide](docs/SHARING.md). [All documentation](docs/README.md).
 
-ModelHarbor is a local-first, multi-model Agent runtime for personal hardware. The current
-`next` architecture uses:
+ModelHarbor runs local models and Agents on personal hardware and lets small teams share
+inference through an OpenAI-compatible API. Collaborators use an HTTPS Base URL and their own
+API key with the official OpenAI Python SDK; a lightweight public server forwards traffic over
+SSH while inference, authentication, request scheduling, and usage logs run locally.
+
+The current `next` architecture uses:
 
 - [Hypha](https://github.com/AdamsukS/Hypha) for Agent/DomainPack contracts, governed tool execution, and MCP connections;
 - [Plasmod](https://github.com/AdamsukS/Plasmod) for scoped, durable Agent memory;
@@ -16,6 +20,20 @@ ModelHarbor is a local-first, multi-model Agent runtime for personal hardware. T
 
 The repository name and public API are model-neutral. Qwen3.5-9B is only the first local model
 profile.
+
+## Choose your starting point
+
+| Goal | Start here |
+|---|---|
+| Call an existing model service | [API guide](docs/INFERENCE_API.md) and [Python SDK example](scripts/sharing-client.py) |
+| Share your own local inference | [Deployment and migration](docs/DEPLOYMENT.md), with configurable DNS, SSH, and HTTPS settings |
+| Run an Agent with tools and durable memory | Follow the local quick start below and the [Agent API reference](docs/API.md) |
+
+Shared inference supports text Chat Completions, ordinary and streaming responses, individual
+revocable keys, bounded queues, backend-reported token usage, and inference parameter/timing
+metadata. It implements a subset of the OpenAI API; public Agent and Memory endpoints are not
+included. Deployment templates are cloud-provider independent. The verified setup uses Ollama,
+macOS service management, and an Ubuntu/Debian SSH server; see the deployment guide for platform limits.
 
 ## Status
 
@@ -35,6 +53,18 @@ The existing `models/Qwen3.5-9B-4bit` MLX snapshot is preserved and ignored by G
 consume that directory directly, so the Ollama/GGUF profile is downloaded separately.
 
 ## Architecture
+
+Shared model API:
+
+```text
+OpenAI SDK / HTTP client
+  -> Public server: Caddy HTTPS reverse proxy
+  -> Restricted SSH reverse tunnel
+  -> Local inference gateway :8788 (API keys / queue / usage metadata)
+  -> Ollama :11434
+```
+
+Local Agent runtime:
 
 ```text
 Client
@@ -68,7 +98,37 @@ Homebrew can install the missing system tools:
 brew install node@22 pnpm go ollama
 ```
 
-## Quick start
+## Call a shared model with the OpenAI SDK
+
+Install the client with `pip install openai`. Set `OPENAI_BASE_URL` to the service URL ending
+in `/v1` and `OPENAI_API_KEY` to your personal key in your local environment. Obtain both privately
+from the service operator; do not commit them.
+
+```python
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    base_url=os.environ["OPENAI_BASE_URL"],
+    api_key=os.environ["OPENAI_API_KEY"],
+    timeout=660,
+)
+response = client.chat.completions.create(
+    model="local-default",
+    messages=[{"role": "user", "content": "Reply with OK only."}],
+    max_tokens=32,
+)
+print(response.choices[0].message.content)
+print(response.usage)
+print((response.model_extra or {}).get("inference"))
+```
+
+The [complete example](scripts/sharing-client.py) also demonstrates streaming with
+`stream_options={"include_usage": True}`. Inference metadata identifies forwarded request
+parameters; unspecified backend defaults are not guessed. Python is only needed for this client,
+not the ModelHarbor server.
+
+## Quick start (local Agent)
 
 ```bash
 pnpm install
@@ -156,6 +216,10 @@ The web probe disables memory writes; the Memory experiment creates isolated tes
 Complete experimental traces are saved under ignored `runtime/evals/`, not published to Git.
 
 ## Security and current limits
+
+This repository is public. Real deployment URLs, server addresses, API keys, SSH private keys,
+and request logs belong in private local state, outside Git. Public templates use placeholders;
+deployment settings are configurable and do not require a particular cloud vendor.
 
 An optional [inference-sharing gateway](docs/SHARING.md) now provides a separate, authenticated
 OpenAI-compatible text Chat Completions endpoint, including streaming, token usage and inference

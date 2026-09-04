@@ -5,7 +5,11 @@
 **调用已有服务：**[共享推理 API 指南](docs/INFERENCE_API.md)。
 **自己部署或迁移：**[通用部署指南](docs/DEPLOYMENT.md)。[完整文档导航](docs/README.md)。
 
-ModelHarbor 是面向个人硬件的本地优先、多模型 Agent 运行服务。当前 `next` 架构使用：
+ModelHarbor 在个人硬件上运行本地模型和 Agent，并通过 OpenAI 兼容 API 向小团队共享推理。
+协作者使用 HTTPS Base URL 和各自的 API Key，即可通过官方 OpenAI Python SDK 调用。
+公网服务器只负责 HTTPS 与 SSH 转发，推理、鉴权、请求排队和用量日志都在本地处理。
+
+当前 `next` 架构使用：
 
 - [Hypha](https://github.com/AdamsukS/Hypha) 管理 Agent/DomainPack 合约、工具治理与 MCP 连接；
 - [Plasmod](https://github.com/AdamsukS/Plasmod) 管理带作用域隔离的持久化 Agent Memory；
@@ -13,6 +17,19 @@ ModelHarbor 是面向个人硬件的本地优先、多模型 Agent 运行服务�
 - TypeScript 网关负责有界排队、上下文组装和 OpenAI 兼容 API。
 
 项目名称与公开接口不绑定具体模型，Qwen3.5-9B 只是首个本地模型配置。
+
+## 从哪里开始
+
+| 你的目标 | 入口 |
+|---|---|
+| 调用已有模型服务 | [API 使用指南](docs/INFERENCE_API.md)与 [Python SDK 示例](scripts/sharing-client.py) |
+| 共享自己的本地推理服务 | [部署与迁移指南](docs/DEPLOYMENT.md)，按需配置域名、SSH 和 HTTPS |
+| 运行带工具和持久记忆的 Agent | 下方本地快速启动与 [Agent API 文档](docs/API.md) |
+
+共享推理支持文本 Chat Completions、普通与流式响应、可独立撤销的个人 Key、有界排队、
+后端返回的 token 用量，以及推理参数和耗时元数据。兼容范围是 OpenAI API 的一个子集，
+目前不包含公开 Agent 和记忆接口。部署模板不绑定云厂商；已验证组合为 Ollama、macOS
+服务管理和 Ubuntu/Debian SSH 服务器，其他平台的支持边界见部署指南。
 
 ## 当前状态
 
@@ -32,6 +49,18 @@ ModelHarbor 是面向个人硬件的本地优先、多模型 Agent 运行服务�
 目录，因此会额外下载 Ollama/GGUF 格式的模型。
 
 ## 架构
+
+共享模型 API：
+
+```text
+OpenAI SDK / HTTP 客户端
+  -> 公网服务器：Caddy HTTPS 反向代理
+  -> 受限 SSH 反向隧道
+  -> 本地推理网关 :8788（Key 鉴权 / 排队 / 用量元数据）
+  -> Ollama :11434
+```
+
+本地 Agent 运行服务：
 
 ```text
 客户端
@@ -65,7 +94,35 @@ Hypha 与 Plasmod 不会被复制进项目，也不使用 submodule。`scripts/p
 brew install node@22 pnpm go ollama
 ```
 
-## 快速启动
+## 使用 OpenAI SDK 调用共享模型
+
+运行 `pip install openai` 安装客户端。在本地环境中设置 `OPENAI_BASE_URL`（以 `/v1`
+结尾的服务地址）和 `OPENAI_API_KEY`（个人 Key）。这两项由服务提供者私下交付，不要提交到仓库。
+
+```python
+import os
+from openai import OpenAI
+
+client = OpenAI(
+    base_url=os.environ["OPENAI_BASE_URL"],
+    api_key=os.environ["OPENAI_API_KEY"],
+    timeout=660,
+)
+response = client.chat.completions.create(
+    model="local-default",
+    messages=[{"role": "user", "content": "你好，只回复 OK。"}],
+    max_tokens=32,
+)
+print(response.choices[0].message.content)
+print(response.usage)
+print((response.model_extra or {}).get("inference"))
+```
+
+[完整示例](scripts/sharing-client.py)还包含使用 `stream_options={"include_usage": True}`
+读取 token 用量的流式调用。推理元数据标明转发给后端的请求参数，不猜测未指定的后端默认值。
+Python 仅用于这个客户端，ModelHarbor 服务端不需要 Python。
+
+## 快速启动（本地 Agent）
 
 ```bash
 pnpm install
@@ -151,6 +208,9 @@ pnpm run eval:memory
 Git 忽略的 `runtime/evals/`，不会发布进仓库。
 
 ## 安全边界与当前限制
+
+本仓库保持公开。真实部署 URL、服务器地址、API Key、SSH 私钥和请求日志保存在 Git
+之外的本地私有目录。公开模板使用占位符，部署配置不依赖特定云厂商。
 
 现在可以通过独立的[推理共享入口](docs/SHARING.md)提供带 Key 鉴权的 OpenAI 兼容文本
 Chat Completions，支持流式输出、token 用量和推理参数/耗时元数据。
