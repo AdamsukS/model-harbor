@@ -11,7 +11,7 @@ afterEach(async () => {
   await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
 });
 
-async function startDependencies(options: { ollamaStatus?: number; delayed?: boolean } = {}) {
+async function startDependencies(options: { ollamaStatus?: number; delayed?: boolean; expectMemory?: boolean } = {}) {
   const order: string[] = [];
   let releaseOllama: (() => void) | undefined;
   const ollamaGate = new Promise<void>((resolve) => {
@@ -22,7 +22,10 @@ async function startDependencies(options: { ollamaStatus?: number; delayed?: boo
     if (request.pathname === '/v1/query') {
       order.push('plasmod:query');
       return json(response, 200, {
-        objects: [{ memory_id: 'm1', content: 'The user prefers concise answers.' }],
+        objects: [{ memory_id: 'm1', content: 'The user prefers concise answers.',
+          tenant_id: (request.body as any).tenant_id,
+          agent_id: (request.body as any).agent_id, workspace_id: (request.body as any).workspace_id,
+          session_id: (request.body as any).session_id ?? 'seed-session' }],
       });
     }
     if (request.pathname === '/v1/ingest/events') {
@@ -69,7 +72,7 @@ async function startDependencies(options: { ollamaStatus?: number; delayed?: boo
       order.push('ollama:chat');
       if (options.delayed) await ollamaGate;
       const body = request.body as { messages: Array<{ content: string }> };
-      expect(body.messages[0]?.content).toContain('The user prefers concise answers.');
+      if (options.expectMemory !== false) expect(body.messages[0]?.content).toContain('The user prefers concise answers.');
       return json(response, options.ollamaStatus ?? 200, {
         model: 'qwen3.5:9b-128k',
         message: { role: 'assistant', content: 'A concise response.' },
@@ -126,6 +129,28 @@ async function postChat(baseUrl: string, headers: Record<string, string> = {}) {
 }
 
 describe('ModelHarbor service', () => {
+  it('supports uncontaminated memory-off probes without query or writes', async () => {
+    const dependency = await startDependencies({ expectMemory: false });
+    const { baseUrl } = await startModelHarbor(dependency);
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-User-ID': 'alice', 'X-Session-ID': 'probe' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'Probe' }], memory_mode: 'off', memory_write: false }),
+    });
+    expect(response.status).toBe(200);
+    expect((await response.json()).benchmark).toMatchObject({ memoryMode: 'off', memoryHits: 0, persisted: false });
+    expect(dependency.order).toEqual(['ollama:chat']);
+  });
+
+  it('rejects local tools without owner credentials before inference', async () => {
+    const dependency = await startDependencies();
+    const { baseUrl } = await startModelHarbor(dependency);
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-User-ID': 'other', 'X-Session-ID': 'probe' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: 'Read mail' }], tool_mode: 'local' }),
+    });
+    expect(response.status).toBe(403);
+    expect(dependency.order).toEqual([]);
+  });
   it('reports readiness only when Ollama and Plasmod are ready', async () => {
     const dependency = await startDependencies();
     const { baseUrl } = await startModelHarbor(dependency);

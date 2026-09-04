@@ -22,6 +22,9 @@ The two source forks are pinned in `config/runtime-sources.json` and checked out
 | `src/dependency-error.ts` | Timeouts, JSON/status normalization, and dependency error classification. |
 | `src/service.ts` | HTTP validation, readiness, memory/inference orchestration, Bench APIs/static assets, OpenAI-compatible response, and shutdown. |
 | `src/main.ts` | Production composition and signal handling. |
+| `src/tool-runtime.ts` | Official Hypha ToolRegistry/GovernedToolRunner, native tool adapters, owner-token authorization, bounded Ollama tool loop. |
+| `scripts/apple-tools.js` | Static read-only macOS JavaScript for Automation; arguments are data, never executable source. |
+| `scripts/eval-memory.ts` | Reproducible live-model recall-on/off and user-isolation probes; writes local evidence under runtime/evals. |
 
 ## Agent Bench
 

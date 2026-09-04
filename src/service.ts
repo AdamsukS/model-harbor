@@ -10,6 +10,7 @@ import type { RuntimeConfig } from './config';
 import { assembleContext, type ChatMessage, type ChatRole } from './context';
 import { DependencyError, isRecord } from './dependency-error';
 import type { InferenceClient } from './ollama-client';
+import { ToolBudgetError, type AgentTools, type ToolMode } from './tool-runtime';
 import type {
   BenchmarkArtifact,
   CanonicalMemory,
@@ -28,6 +29,7 @@ export interface ServiceDependencies {
   monotonicNow?: () => number;
   createId?: () => string;
   webRoot?: string;
+  tools?: AgentTools;
 }
 
 export interface ModelHarborService {
@@ -106,9 +108,15 @@ export function createService(dependencies: ServiceDependencies): ModelHarborSer
     if (method === 'GET' && pathname === '/v1/bench/runtime') {
       return runtimeSnapshot(response);
     }
+    if (method === 'GET' && pathname === '/v1/tools') {
+      return sendJson(response, 200, { tools: dependencies.tools?.catalog() ?? [] });
+    }
     if (method === 'POST' && pathname === '/v1/chat/completions') {
       const scope = requestScope(request, config);
       const body = parseChatRequest(await readJson(request));
+      if (body.toolMode === 'local' && !dependencies.tools?.authorizeLocal(scope.userId, header(request, 'x-local-tool-token') ?? '')) {
+        throw new HttpError(403, 'LOCAL_TOOLS_FORBIDDEN', 'Local tools require the owner user and local access token.');
+      }
       const requestStarted = monotonicNow();
       const completion = await queue.run(scope.userId, async () => {
         const admittedAt = monotonicNow();
@@ -116,7 +124,8 @@ export function createService(dependencies: ServiceDependencies): ModelHarborSer
           ?.content;
         if (!queryText) throw new HttpError(400, 'INVALID_REQUEST', 'A user message is required.');
         const memoryStarted = monotonicNow();
-        const memory = await plasmod.query({ queryText, scope, topK: config.plasmod.topK });
+        const memory = body.memoryMode === 'off' ? { memories: [], raw: null } :
+          await plasmod.query({ queryText, scope, topK: config.plasmod.topK, scopeMode: body.memoryMode });
         const memoryCompleted = monotonicNow();
         const context = assembleContext(
           body.messages,
@@ -124,11 +133,16 @@ export function createService(dependencies: ServiceDependencies): ModelHarborSer
           config.limits.contextCharacters
         );
         const inferenceStarted = monotonicNow();
-        const inference = await ollama.chat(context.messages);
+        const inference = dependencies.tools && body.toolMode !== 'off'
+          ? await dependencies.tools.run(ollama, context.messages, scope, body.toolMode, config.limits.contextCharacters, body.searchQuery)
+          : { ...await ollama.chat(context.messages), trace: [] };
         const inferenceCompleted = monotonicNow();
         const occurredAt = now();
         const id = createId();
         const partialBenchmark = {
+          memoryMode: body.memoryMode,
+          memoryEvidence: memory.raw,
+          toolTrace: inference.trace,
           queueWaitMs: elapsed(requestStarted, admittedAt),
           memoryQueryMs: elapsed(memoryStarted, memoryCompleted),
           inferenceMs: elapsed(inferenceStarted, inferenceCompleted),
@@ -141,7 +155,7 @@ export function createService(dependencies: ServiceDependencies): ModelHarborSer
           queue: queue.snapshot(),
         };
         const writeStarted = monotonicNow();
-        await plasmod.ingestInteraction({
+        if (body.memoryWrite) await plasmod.ingestInteraction({
           eventId: id,
           scope,
           userText: queryText,
@@ -155,10 +169,10 @@ export function createService(dependencies: ServiceDependencies): ModelHarborSer
           ...partialBenchmark,
           memoryWriteMs: elapsed(writeStarted, interactionPersisted),
           totalMs: elapsed(requestStarted, interactionPersisted),
-          persisted: true,
+          persisted: body.memoryWrite,
         };
         try {
-          await plasmod.persistBenchmark({
+          if (body.memoryWrite) await plasmod.persistBenchmark({
             eventId: id,
             scope,
             occurredAt,
@@ -318,12 +332,28 @@ async function readJson(request: IncomingMessage): Promise<unknown> {
   }
 }
 
-function parseChatRequest(value: unknown): { messages: ChatMessage[] } {
+function parseChatRequest(value: unknown): {
+  messages: ChatMessage[]; memoryMode: 'session' | 'user' | 'off'; memoryWrite: boolean; toolMode: ToolMode; searchQuery: string;
+} {
   if (!isRecord(value) || !Array.isArray(value.messages)) {
     throw new HttpError(400, 'INVALID_REQUEST', 'messages must be a non-empty array.');
   }
   if (value.stream === true) {
     throw new HttpError(400, 'STREAMING_UNSUPPORTED', 'Streaming is not supported in phase one.');
+  }
+  const memoryMode = value.memory_mode ?? 'session';
+  const toolMode = value.tool_mode ?? 'off';
+  if (memoryMode !== 'session' && memoryMode !== 'user' && memoryMode !== 'off') {
+    throw new HttpError(400, 'INVALID_REQUEST', 'memory_mode must be session, user, or off.');
+  }
+  if (toolMode !== 'off' && toolMode !== 'public' && toolMode !== 'local') {
+    throw new HttpError(400, 'INVALID_REQUEST', 'tool_mode must be off, public, or local.');
+  }
+  if (value.memory_write !== undefined && typeof value.memory_write !== 'boolean') {
+    throw new HttpError(400, 'INVALID_REQUEST', 'memory_write must be boolean.');
+  }
+  if (value.search_query !== undefined && (typeof value.search_query !== 'string' || value.search_query.length > 500)) {
+    throw new HttpError(400, 'INVALID_REQUEST', 'search_query must be at most 500 characters.');
   }
   const messages = value.messages.map((candidate) => {
     if (
@@ -339,7 +369,7 @@ function parseChatRequest(value: unknown): { messages: ChatMessage[] } {
   if (messages.length === 0) {
     throw new HttpError(400, 'INVALID_REQUEST', 'messages must be a non-empty array.');
   }
-  return { messages };
+  return { messages, memoryMode, memoryWrite: value.memory_write !== false, toolMode, searchQuery: typeof value.search_query === 'string' ? value.search_query.trim() : '' };
 }
 
 function isChatRole(value: unknown): value is ChatRole {
@@ -462,6 +492,9 @@ function sendError(response: ServerResponse, error: unknown): void {
   }
   if (error instanceof AdmissionError) {
     return sendJson(response, 429, { error: { code: error.code, message: error.message } });
+  }
+  if (error instanceof ToolBudgetError) {
+    return sendJson(response, 422, { error: { code: 'TOOL_BUDGET_EXCEEDED', message: error.message } });
   }
   if (error instanceof DependencyError) {
     return sendJson(response, 503, {

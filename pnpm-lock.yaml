@@ -17,6 +17,9 @@ importers:
       '@codesoul-co/hypha-memory':
         specifier: 1.0.1
         version: 1.0.1
+      '@codesoul-co/hypha-tools':
+        specifier: 1.0.1
+        version: 1.0.1
       react:
         specifier: 19.1.1
         version: 19.1.1

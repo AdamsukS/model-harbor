@@ -19,11 +19,28 @@ export interface InferenceResult {
   model: string;
   promptTokens: number;
   completionTokens: number;
+  toolCalls?: ToolCall[];
+}
+
+export interface ToolCall {
+  function: { name: string; arguments: Record<string, unknown> };
+}
+
+export interface ToolDefinition {
+  type: 'function';
+  function: { name: string; description: string; parameters: Record<string, unknown> };
+}
+
+export interface InferenceMessage {
+  role: ChatMessage['role'] | 'tool';
+  content: string;
+  tool_calls?: ToolCall[];
+  tool_name?: string;
 }
 
 export interface InferenceClient {
   health(signal?: AbortSignal): Promise<{ modelAvailable: boolean }>;
-  chat(messages: readonly ChatMessage[], signal?: AbortSignal): Promise<InferenceResult>;
+  chat(messages: readonly InferenceMessage[], signal?: AbortSignal, tools?: ToolDefinition[]): Promise<InferenceResult>;
 }
 
 export class OllamaClient implements InferenceClient {
@@ -41,7 +58,7 @@ export class OllamaClient implements InferenceClient {
     };
   }
 
-  async chat(messages: readonly ChatMessage[], signal?: AbortSignal): Promise<InferenceResult> {
+  async chat(messages: readonly InferenceMessage[], signal?: AbortSignal, tools?: ToolDefinition[]): Promise<InferenceResult> {
     const payload = await this.request(
       '/api/chat',
       {
@@ -52,6 +69,7 @@ export class OllamaClient implements InferenceClient {
           messages,
           stream: false,
           think: this.options.thinking,
+          ...(tools?.length ? { tools } : {}),
           options: { num_ctx: this.options.contextTokens },
         }),
       },
@@ -61,14 +79,21 @@ export class OllamaClient implements InferenceClient {
       throw new DependencyError('ollama', 'Ollama returned an invalid chat response.');
     }
     const content = payload.message.content;
-    if (typeof content !== 'string' || content.trim() === '') {
+    const calls = payload.message.tool_calls;
+    if (calls !== undefined && (!Array.isArray(calls) || calls.some((call) =>
+      !isRecord(call) || !isRecord(call.function) ||
+      typeof call.function.name !== 'string' || !isRecord(call.function.arguments)
+    ))) throw new DependencyError('ollama', 'Ollama returned invalid tool calls.');
+    const toolCalls = calls as ToolCall[] | undefined;
+    if ((typeof content !== 'string' || content.trim() === '') && !toolCalls?.length) {
       throw new DependencyError('ollama', 'Ollama returned empty assistant content.');
     }
     return {
-      content,
+      content: typeof content === 'string' ? content : '',
       model: typeof payload.model === 'string' ? payload.model : this.options.model,
       promptTokens: integerOrZero(payload.prompt_eval_count),
       completionTokens: integerOrZero(payload.eval_count),
+      ...(toolCalls?.length ? { toolCalls } : {}),
     };
   }
 

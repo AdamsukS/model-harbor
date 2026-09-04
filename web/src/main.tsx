@@ -1,4 +1,4 @@
-import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './styles.css';
 
@@ -6,6 +6,8 @@ type Tab = 'chat' | 'history' | 'memory' | 'runtime';
 type Role = 'user' | 'assistant';
 
 interface Benchmark {
+  memoryMode?: string;
+  toolTrace?: Array<{ type?: string; payload?: unknown }>;
   queueWaitMs?: number;
   memoryQueryMs?: number;
   inferenceMs?: number;
@@ -88,6 +90,14 @@ function App() {
   const [pending, setPending] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const refreshVersion = useRef(0);
+  const [memoryMode, setMemoryMode] = useState('session');
+  const [toolMode, setToolMode] = useState('off');
+  const [localToken, setLocalToken] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [toolCatalog, setToolCatalog] = useState<Array<{ name: string; status: string }>>([]);
+  useEffect(() => { void api<{ tools: Array<{ name: string; status: string }> }>('/v1/tools')
+    .then((data) => setToolCatalog(data.tools)).catch(() => {}); }, []);
 
   const scopedHeaders = useMemo(
     () => ({ 'X-User-ID': userId.trim(), 'X-Session-ID': sessionId.trim() }),
@@ -95,6 +105,7 @@ function App() {
   );
 
   const refresh = useCallback(async () => {
+    const version = ++refreshVersion.current;
     if (!userId.trim() || !sessionId.trim()) return;
     setLoading(true);
     try {
@@ -106,6 +117,7 @@ function App() {
         api<{ memories: MemoryRecord[] }>('/v1/bench/memory', { headers: scopedHeaders }),
         api<RuntimeSnapshot>('/v1/bench/runtime'),
       ]);
+      if (version !== refreshVersion.current) return;
       setSessions(sessionData.sessions);
       setMemories(memoryData.memories);
       setRuntime(runtimeData);
@@ -122,9 +134,9 @@ function App() {
       );
       setError('');
     } catch (caught) {
-      setError(messageOf(caught));
+      if (version === refreshVersion.current) setError(messageOf(caught));
     } finally {
-      setLoading(false);
+      if (version === refreshVersion.current) setLoading(false);
     }
   }, [scopedHeaders, sessionId, userId]);
 
@@ -137,7 +149,7 @@ function App() {
   async function send(event: FormEvent) {
     event.preventDefault();
     const text = input.trim();
-    if (!text || pending) return;
+    if (!text || pending || loading) return;
     const userMessage: Message = { id: crypto.randomUUID(), role: 'user', content: text };
     const outgoing = [...messages, userMessage];
     setMessages(outgoing);
@@ -151,10 +163,14 @@ function App() {
         benchmark: Benchmark;
       }>('/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...scopedHeaders },
+        headers: { 'Content-Type': 'application/json', ...scopedHeaders,
+          ...(toolMode === 'local' ? { 'X-Local-Tool-Token': localToken.trim() } : {}) },
         body: JSON.stringify({
           model: 'local-default',
           stream: false,
+          memory_mode: memoryMode,
+          tool_mode: toolMode,
+          search_query: toolMode === 'public' ? searchQuery : '',
           messages: outgoing.map(({ role, content }) => ({ role, content })),
         }),
       });
@@ -214,13 +230,31 @@ function App() {
           </nav>
           <div className="scope-card">
             <span className="eyebrow">Active scope</span>
-            <label>User<input value={userId} onChange={(event) => setUserId(event.target.value)} /></label>
-            <label>Session<input value={sessionId} onChange={(event) => setSessionId(event.target.value)} /></label>
-            <button className="secondary" onClick={startNewSession}>New session</button>
+            <label>User<input disabled={pending} value={userId} onChange={(event) => { setMessages([]); setMemories([]); setUserId(event.target.value); }} /></label>
+            <label>Session<input disabled={pending} value={sessionId} onChange={(event) => { setMessages([]); setMemories([]); setSessionId(event.target.value); }} /></label>
+            <button className="secondary" disabled={pending} onClick={startNewSession}>New session</button>
           </div>
         </aside>
 
         <main className="main-stage">
+          <details className="panel tool-settings">
+            <summary>Tools & Memory controls</summary>
+            <label>Memory <select value={memoryMode} onChange={(e) => setMemoryMode(e.target.value)}>
+              <option value="session">Current session</option><option value="user">Across my sessions</option><option value="off">Recall off (writes remain on)</option>
+            </select></label>
+            <label>Tools <select value={toolMode} onChange={(e) => setToolMode(e.target.value)}>
+              <option value="off">Off</option><option value="public">Public: time / web</option><option value="local">Private: Apple Calendar / Mail</option>
+            </select></label>
+            {toolMode === 'local' && <label>Local tools token (not saved in browser)
+              <input type="password" autoComplete="off" value={localToken} onChange={(e) => setLocalToken(e.target.value)} />
+              <small>Owner only · runtime/local-tools.token · macOS Automation permission required</small>
+            </label>}
+            {toolMode === 'public' && <label>Approved public search query
+              <input value={searchQuery} maxLength={500} onChange={(e) => setSearchQuery(e.target.value)} />
+              <small>Only this exact query may leave the device. Requires OLLAMA_WEB_SEARCH_API_KEY.</small>
+            </label>}
+            <p>{toolCatalog.map((tool) => `${tool.name}: ${tool.status}`).join(' · ')}</p>
+          </details>
           {error && <div className="error-banner" role="alert">{error}</div>}
           {tab === 'chat' && (
             <ChatView
@@ -240,7 +274,7 @@ function App() {
               activeSession={sessionId}
               messages={messages}
               loading={loading}
-              selectSession={setSessionId}
+              selectSession={(id) => { if (!pending) { setMessages([]); setSessionId(id); } }}
             />
           )}
           {tab === 'memory' && <MemoryView memories={memories} loading={loading} />}
@@ -301,7 +335,7 @@ function ChatView(props: {
         />
         <div className="composer-footer">
           <span>Enter to send · Shift + Enter for a new line</span>
-          <button className="primary" disabled={props.pending || !props.input.trim()}>
+          <button className="primary" disabled={props.pending || props.loading || !props.input.trim()}>
             {props.pending ? 'Queued…' : 'Send'}
           </button>
         </div>
@@ -319,6 +353,9 @@ function TurnMetrics({ value }: { value: Benchmark }) {
       <Metric label="Queue" value={milliseconds(value.queueWaitMs)} />
       <Metric label="Memory hits" value={String(value.memoryHits ?? 0)} />
       <Metric label="Context" value={value.contextTruncated ? 'Trimmed' : 'Full'} warning={value.contextTruncated} />
+      {value.memoryMode && <Metric label="Recall scope" value={value.memoryMode} />}
+      {!!value.toolTrace?.length && <details><summary>Tool trace ({value.toolTrace.length} events)</summary>
+        <pre>{JSON.stringify(value.toolTrace, null, 2)}</pre></details>}
     </div>
   );
 }

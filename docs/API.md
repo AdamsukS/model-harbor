@@ -127,13 +127,35 @@ Uses the same scope headers as Chat.
 {"query":"preferred response style"}
 ```
 
-The response contains extracted text plus Plasmod's structured evidence envelope:
+The response contains extracted text plus a scope-validated projection of Plasmod's structured
+evidence. Unfiltered upstream graph/trace payloads are deliberately not forwarded:
 
 ```json
 {"memories":["The user prefers concise answers."],"evidence":{}}
 ```
 
 ## Agent Bench APIs
+
+### Chat controls
+
+Optional fields on `POST /v1/chat/completions`:
+
+| Field | Values / default | Meaning |
+|---|---|---|
+| `memory_mode` | `session` (default), `user`, `off` | Recall in this session, across the same user workspace, or no recall. |
+| `memory_write` | boolean, default `true` | Set false for read-only experimental probes; no interaction or benchmark write. |
+| `tool_mode` | `off` (default), `public`, `local` | No tools; time/public search; or time/private Apple tools. |
+| `search_query` | string, max 500 chars | Explicitly approved public query; the model cannot change it before external search. |
+
+`local` tools additionally require `X-Local-Tool-Token` and the owner `X-User-ID`.
+Unauthorized requests return `403 LOCAL_TOOLS_FORBIDDEN` before inference. The token is never
+returned by an API. `benchmark.toolTrace` contains Hypha execution events, and
+`benchmark.memoryEvidence` contains scope-validated recall evidence for local analysis, including
+`scope_filtered_count`. Identities that cannot be verified are excluded.
+
+### `GET /v1/tools`
+
+Returns tool names, modes and configuration status; no account contents or credentials.
 
 The bundled UI uses these same-origin endpoints. They are stable backend boundaries for future
 gateways; clients should not call Plasmod directly.

@@ -14,6 +14,12 @@
 }
 
 * { box-sizing: border-box; }
+.tool-settings { margin: 0 auto 20px; max-width: 1180px; font-size: 12px; }
+.tool-settings summary { cursor: pointer; font-weight: 600; }
+.tool-settings label { display: grid; gap: 5px; margin-top: 12px; }
+.tool-settings input, .tool-settings select { padding: 8px; max-width: 520px; }
+.tool-settings small, .tool-settings p { color: var(--muted); overflow-wrap: anywhere; }
+.turn-metrics pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; font-size: 10px; }
 body { margin: 0; min-width: 320px; min-height: 100vh; }
 button, input, textarea { font: inherit; }
 button { color: inherit; }

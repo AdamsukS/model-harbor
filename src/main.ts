@@ -4,6 +4,7 @@ import { loadConfig } from './config';
 import { OllamaClient } from './ollama-client';
 import { PlasmodClient } from './plasmod-client';
 import { createService } from './service';
+import { createAgentTools } from './tool-runtime';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -13,6 +14,7 @@ async function main(): Promise<void> {
     contract,
     ollama: new OllamaClient(config.ollama),
     plasmod: new PlasmodClient(config.plasmod),
+    tools: await createAgentTools(path.resolve('.')),
   });
   const baseUrl = await service.listen();
   process.stdout.write(`ModelHarbor listening at ${baseUrl}\n`);

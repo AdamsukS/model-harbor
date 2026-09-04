@@ -102,7 +102,9 @@ curl http://127.0.0.1:8787/v1/chat/completions \
   }'
 ```
 
-Phase one supports non-streaming chat. Tool execution, MCP, the complete Hypha production Harness,
+Chat supports optional bounded, read-only Hypha-governed tools: current time, Apple Calendar/Mail,
+and key-configured web search. See [tool setup and safety](docs/TOOLS.md).
+Non-streaming chat remains the default. MCP, the complete Hypha production Harness,
 automatic memory summarization, and direct llama.cpp KV experiments will be added incrementally.
 
 ## 128K and KV cache
@@ -123,3 +125,5 @@ prefix, and KV-cache experiments.
 - [API reference](docs/API.md)
 - [Modules and maintenance](docs/MODULES.md)
 - [Operations guide](docs/OPERATIONS.md)
+- [Tools and local authorization](docs/TOOLS.md)
+- [Memory evaluation protocol](docs/MEMORY-EVALUATION.md)

@@ -100,7 +100,8 @@ curl http://127.0.0.1:8787/v1/chat/completions \
   }'
 ```
 
-第一阶段仅支持非流式 Chat。工具执行、MCP、完整 Hypha Production Harness、自动摘要以及
+Chat 已支持可选的 Hypha 治理只读工具：当前时间、Apple Calendar/Mail，以及配置 Key 后的网页搜索。
+详见[工具与本地授权](docs/TOOLS.md)。目前仍为非流式 Chat；MCP、完整 Hypha Production Harness、自动摘要以及
 直接 llama.cpp KV 实验会在后续逐步接入。
 
 ## 128K 与 KV Cache
@@ -119,3 +120,5 @@ Ollama 模型配置请求 `131072` Token。启动参数启用 Flash Attention、
 - [API 文档](docs/API.md)
 - [模块与维护](docs/MODULES.md)
 - [运行维护指南](docs/OPERATIONS.md)
+- [工具与本地授权](docs/TOOLS.md)
+- [Memory 对照测试方法](docs/MEMORY-EVALUATION.md)

@@ -8,6 +8,7 @@ const scope = {
   agentId: 'agent-local',
   sessionId: 'session-1',
 };
+const identity = { tenant_id: scope.tenantId, agent_id: scope.agentId, workspace_id: scope.userId, session_id: scope.sessionId };
 
 const cleanups: Array<() => Promise<void>> = [];
 const benchmark = {
@@ -27,14 +28,22 @@ afterEach(async () => {
 });
 
 describe('PlasmodClient', () => {
+  it('omits only session restriction for explicit same-user cross-session recall', async () => {
+    const server = await startTestServer((_request, response) => json(response, 200, { objects: [] }));
+    cleanups.push(server.close);
+    const client = new PlasmodClient({ baseUrl: server.baseUrl, timeoutMs: 1000 });
+    await client.query({ queryText: 'test', scope, topK: 5, scopeMode: 'user' });
+    expect(server.requests[0]?.body).not.toHaveProperty('session_id');
+    expect(server.requests[0]?.body).toMatchObject({ tenant_id: scope.tenantId, workspace_id: scope.userId, agent_id: scope.agentId });
+  });
   it('queries scoped memory and extracts readable content', async () => {
     const server = await startTestServer((request, response) => {
       expect(request.pathname).toBe('/v1/query');
       json(response, 200, {
         objects: [
-          { memory_id: 'memory-1', content: 'The user prefers concise answers.' },
-          { memory_id: 'memory-2', summary: 'The user works in Chinese and English.' },
-          { memory_id: 'memory-3', payload: { text: 'The user uses a Mac.' } },
+          { ...identity, memory_id: 'memory-1', content: 'The user prefers concise answers.' },
+          { ...identity, memory_id: 'memory-2', summary: 'The user works in Chinese and English.' },
+          { ...identity, memory_id: 'memory-3', content: 'The user uses a Mac.' },
         ],
         query_status: 'completed',
       });
@@ -72,6 +81,7 @@ describe('PlasmodClient', () => {
             object_type: 'memory',
             label: 'User: Hello\nAssistant: Hi.',
             properties: {
+              ...identity,
               content: 'User: Hello\nAssistant: Hi.',
               summary: 'A short greeting.',
             },
@@ -91,6 +101,24 @@ describe('PlasmodClient', () => {
     const result = await client.query({ queryText: 'greeting', scope, topK: 5 });
 
     expect(result.memories).toEqual(['User: Hello\nAssistant: Hi.']);
+  });
+
+  it('filters cross-session and cross-user hits even if the upstream ignores selectors', async () => {
+    const server = await startTestServer((_request, response) => json(response, 200, {
+      nodes: [
+        { object_id: 'allowed', object_type: 'memory', properties: { ...identity, content: 'allowed' } },
+        { object_id: 'old', object_type: 'memory', properties: { ...identity, session_id: 'old-session', content: 'old' } },
+        { object_id: 'other', object_type: 'memory', properties: { ...identity, workspace_id: 'other-user', content: 'secret' } },
+      ], edges: [{ private: 'unfiltered' }], proof_trace: [{ private: 'unfiltered' }],
+    }));
+    cleanups.push(server.close);
+    const client = new PlasmodClient({ baseUrl: server.baseUrl, timeoutMs: 1000 });
+    const session = await client.query({ queryText: 'test', scope, topK: 5 });
+    expect(session.memories).toEqual(['allowed']);
+    expect(JSON.stringify(session.raw)).not.toContain('secret');
+    expect(JSON.stringify(session.raw)).not.toContain('unfiltered');
+    const user = await client.query({ queryText: 'test', scope, topK: 5, scopeMode: 'user' });
+    expect(user.memories).toEqual(['allowed', 'old']);
   });
 
   it('ingests a strict Dynamic Event v0.4 interaction', async () => {

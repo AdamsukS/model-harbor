@@ -21,6 +21,7 @@ export interface MemoryQueryInput {
   queryText: string;
   scope: MemoryScope;
   topK: number;
+  scopeMode?: 'session' | 'user';
 }
 
 export interface MemoryQueryResult {
@@ -39,6 +40,9 @@ export interface InteractionInput {
 }
 
 export interface TurnBenchmark {
+  memoryMode?: 'session' | 'user' | 'off';
+  memoryEvidence?: unknown;
+  toolTrace?: unknown[];
   queueWaitMs: number;
   memoryQueryMs: number;
   inferenceMs: number;
@@ -100,7 +104,7 @@ export class PlasmodClient {
           query_text: input.queryText,
           tenant_id: input.scope.tenantId,
           workspace_id: input.scope.userId,
-          session_id: input.scope.sessionId,
+          ...(input.scopeMode === 'user' ? {} : { session_id: input.scope.sessionId }),
           agent_id: input.scope.agentId,
           requester_agent_id: input.scope.agentId,
           object_types: ['memory'],
@@ -110,7 +114,8 @@ export class PlasmodClient {
       },
       signal
     );
-    return { memories: extractMemoryText(raw), raw };
+    const evidence = scopedEvidence(raw, input);
+    return { memories: extractMemoryText(evidence), raw: evidence };
   }
 
   async ingestInteraction(input: InteractionInput, signal?: AbortSignal): Promise<unknown> {
@@ -237,6 +242,43 @@ export class PlasmodClient {
     }
     return parseJsonResponse('plasmod', response);
   }
+}
+
+function scopedEvidence(raw: unknown, input: MemoryQueryInput): Record<string, unknown> {
+  if (!isRecord(raw)) return { objects: [], nodes: [], scope_filtered_count: 0 };
+  const candidates: Array<Record<string, unknown>> = [];
+  const snapshots = new Map<string, Record<string, unknown>>();
+  for (const version of Array.isArray(raw.versions) ? raw.versions : []) {
+    if (isRecord(version) && typeof version.object_id === 'string' && isRecord(version.snapshot)) {
+      snapshots.set(version.object_id, version.snapshot);
+    }
+  }
+  for (const object of Array.isArray(raw.objects) ? raw.objects : []) {
+    if (isRecord(object)) candidates.push({ object_id: object.memory_id, object_type: 'memory', properties: object });
+  }
+  for (const node of Array.isArray(raw.nodes) ? raw.nodes : []) {
+    if (isRecord(node) && node.object_type === 'memory' && isRecord(node.properties)) {
+      const snapshot = typeof node.object_id === 'string' ? snapshots.get(node.object_id) : undefined;
+      candidates.push({ ...node, properties: { tenant_id: snapshot?.tenant_id, ...node.properties } });
+    }
+  }
+  // Enforce the product's scope even when upstream retrieval treats session_id as context only.
+  // Do not return unfiltered graph/trace payloads through the memory API.
+  const nodes = candidates.filter((node) => {
+    const properties = node.properties;
+    if (!isRecord(properties)) return false;
+    return properties.agent_id === input.scope.agentId &&
+      (properties.workspace_id ?? properties.scope) === input.scope.userId &&
+      properties.tenant_id === input.scope.tenantId &&
+      (input.scopeMode === 'user' || properties.session_id === input.scope.sessionId);
+  });
+  return {
+    objects: nodes.map((node) => node.object_id), nodes,
+    query_status: nodes.length ? 'ok' : 'no_scoped_memory_hits',
+    upstream_query_status: raw.query_status,
+    scope_filtered_count: candidates.length - nodes.length,
+    diagnostics: raw.diagnostics,
+  };
 }
 
 function isCanonicalMemory(value: unknown): value is CanonicalMemory {

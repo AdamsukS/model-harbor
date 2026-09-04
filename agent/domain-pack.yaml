@@ -40,7 +40,7 @@ workflows:
     terminalStates: [Completed, Failed]
     states:
       - id: Respond
-        goal: Recall scoped memory and produce one bounded assistant response.
+        goal: Recall scoped memory, optionally execute bounded read-only governed tools, and produce one assistant response.
         reasoningProfileRef: reasoning.local-chat
         timeoutPolicy: { timeoutMs: 300000, onTimeout: fail }
         retryPolicy: { maxAttempts: 1 }

@@ -17,6 +17,8 @@
     "runtime:prepare": "bash scripts/prepare.sh",
     "health": "bash scripts/health.sh",
     "smoke": "bash scripts/smoke.sh",
+    "eval:memory": "tsx scripts/eval-memory.ts",
+    "tools:check-apple": "node scripts/check-apple-tools.mjs",
     "stop": "bash scripts/stop.sh",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit"
@@ -25,6 +27,7 @@
     "@codesoul-co/hypha-core": "1.0.1",
     "@codesoul-co/hypha-domain": "1.0.1",
     "@codesoul-co/hypha-memory": "1.0.1",
+    "@codesoul-co/hypha-tools": "1.0.1",
     "react": "19.1.1",
     "react-dom": "19.1.1"
   },

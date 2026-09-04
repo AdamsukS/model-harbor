@@ -8,6 +8,17 @@ afterEach(async () => {
 });
 
 describe('OllamaClient', () => {
+  it('accepts tool-only assistant responses using the documented Ollama protocol', async () => {
+    const server = await startTestServer((_request, response) => json(response, 200, {
+      message: { content: '', tool_calls: [{ function: { name: 'current_time', arguments: {} } }] },
+    }));
+    cleanups.push(server.close);
+    const client = new OllamaClient({ baseUrl: server.baseUrl, model: 'test', contextTokens: 1024, thinking: false, timeoutMs: 1000 });
+    const result = await client.chat([{ role: 'user', content: 'Time?' }], undefined,
+      [{ type: 'function', function: { name: 'current_time', description: 'Time', parameters: { type: 'object' } } }]);
+    expect(result.toolCalls?.[0]?.function.name).toBe('current_time');
+    expect(server.requests[0]?.body).toHaveProperty('tools');
+  });
   it('sends a non-streaming chat request with the configured context', async () => {
     const server = await startTestServer((_request, response) => {
       json(response, 200, {
