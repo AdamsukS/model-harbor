@@ -1,0 +1,96 @@
+id: domain.model-harbor.local
+version: 0.1.0
+name: ModelHarbor Local Agent
+description: A bounded local chat Agent using Plasmod memory and a provider-neutral model alias.
+taskSchemas:
+  - id: task.local-chat
+    version: 0.1.0
+    taskType: local_chat
+    inputSchema:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [role, content]
+            properties:
+              role: { type: string, enum: [system, user, assistant] }
+              content: { type: string, minLength: 1 }
+            additionalProperties: false
+      additionalProperties: false
+    outputContractRef: output.local-chat
+    defaultWorkflowRef: workflow.local-chat
+outputContracts:
+  - id: output.local-chat
+    version: 0.1.0
+    schema:
+      type: object
+      required: [answer]
+      properties:
+        answer: { type: string }
+      additionalProperties: false
+workflows:
+  - id: workflow.local-chat
+    version: 0.1.0
+    name: Local chat workflow
+    initialState: Respond
+    terminalStates: [Completed, Failed]
+    states:
+      - id: Respond
+        goal: Recall scoped memory and produce one bounded assistant response.
+        reasoningProfileRef: reasoning.local-chat
+        timeoutPolicy: { timeoutMs: 300000, onTimeout: fail }
+        retryPolicy: { maxAttempts: 1 }
+      - id: Completed
+        goal: Return the assistant response and persist the completed interaction.
+      - id: Failed
+        goal: Record a dependency or validation failure without fabricating a response.
+    transitions:
+      - { from: Respond, to: Completed }
+      - { from: Respond, to: Failed }
+defaultWorkflow: workflow.local-chat
+memoryProfiles:
+  - id: memory.plasmod
+    version: 0.1.0
+    description: Plasmod is the durable memory authority for local chat interactions.
+    providers:
+      - id: memory.provider.plasmod
+        type: hybrid
+        providerRef: memory.provider.plasmod
+    memoryTypes: [working, episodic, semantic]
+    provenancePolicy: required
+    retrievalPolicy:
+      defaultTopK: 5
+      requireScope: true
+    writePolicyConfig:
+      allowLongTerm: true
+      requireProvenance: true
+contextProfiles:
+  - id: context.local-chat
+    version: 0.1.0
+    sources:
+      - { id: context.source.user, version: 0.1.0, type: user_input }
+      - id: context.source.memory
+        version: 0.1.0
+        type: memory
+        provenanceRequired: true
+        trustLevel: untrusted
+    tokenBudget: 131072
+    provenancePolicy: required
+    instructionBoundaryPolicy: tagged
+reasoningProfiles:
+  - id: reasoning.local-chat
+    version: 0.1.0
+    thinkingMode: structured
+    agenticMode: fsm_react
+    maxSteps: 4
+    persist: summary_only
+defaultReasoningProfile: reasoning.local-chat
+deploymentProfile:
+  id: deployment.local
+  version: 0.1.0
+  mode: local
+  runtimeMode: multi-user
