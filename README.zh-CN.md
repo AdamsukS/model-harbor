@@ -16,6 +16,7 @@ ModelHarbor 是面向个人硬件的本地优先、多模型 Agent 运行服务�
 - 默认分支：`next`（TypeScript + Go + 原生推理，不使用 Python 运行时）
 - 旧版基线：`main`（MLX-LM/Python）
 - API：`http://127.0.0.1:8787/v1`
+- Agent Bench：`http://127.0.0.1:8787`
 - 推理模型：`qwen3.5:9b-q4_K_M`，本地配置名为 `qwen3.5:9b-128k`
 - 请求上下文：128K Token
 - 调度：同时只执行一个生成；最多接纳 5 个请求、5 个用户
@@ -68,6 +69,10 @@ pnpm run health
 pnpm run smoke
 ```
 
+浏览器打开 `http://127.0.0.1:8787` 即可使用同源 Agent Bench，其中包含 Chat、持久化
+Session 历史、Plasmod canonical Memory 查看，以及运行时、KV 与队列指标。浏览器只保存
+界面偏好，Plasmod 仍是唯一持久化来源。
+
 准备脚本可以重复执行，并会拒绝修改存在未提交内容的 Hypha/Plasmod checkout。运行状态、
 日志、PID、Plasmod 数据以及 fork 源码都不会进入 Git。
 
@@ -114,4 +119,3 @@ Ollama 模型配置请求 `131072` Token。启动参数启用 Flash Attention、
 - [API 文档](docs/API.md)
 - [模块与维护](docs/MODULES.md)
 - [运行维护指南](docs/OPERATIONS.md)
-- [架构设计](docs/superpowers/specs/2026-09-04-hypha-plasmod-local-runtime-design.md)

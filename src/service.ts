@@ -1,14 +1,22 @@
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { once } from 'node:events';
 import type { AddressInfo } from 'node:net';
+import path from 'node:path';
 import { AdmissionError, AdmissionQueue } from './admission-queue';
 import type { AgentContract } from './agent-contract';
 import type { RuntimeConfig } from './config';
-import { assembleMessages, type ChatMessage, type ChatRole } from './context';
+import { assembleContext, type ChatMessage, type ChatRole } from './context';
 import { DependencyError, isRecord } from './dependency-error';
 import type { InferenceClient } from './ollama-client';
-import type { MemoryScope, PlasmodClient } from './plasmod-client';
+import type {
+  BenchmarkArtifact,
+  CanonicalMemory,
+  MemoryScope,
+  PlasmodClient,
+  TurnBenchmark,
+} from './plasmod-client';
 
 export interface ServiceDependencies {
   config: RuntimeConfig;
@@ -17,7 +25,9 @@ export interface ServiceDependencies {
   plasmod: PlasmodClient;
   queue?: AdmissionQueue;
   now?: () => Date;
+  monotonicNow?: () => number;
   createId?: () => string;
+  webRoot?: string;
 }
 
 export interface ModelHarborService {
@@ -45,7 +55,9 @@ export function createService(dependencies: ServiceDependencies): ModelHarborSer
       maxUsers: config.limits.maxUsers,
     });
   const now = dependencies.now ?? (() => new Date());
+  const monotonicNow = dependencies.monotonicNow ?? (() => performance.now());
   const createId = dependencies.createId ?? (() => `chatcmpl-${randomUUID()}`);
+  const webRoot = path.resolve(dependencies.webRoot ?? 'dist/web');
   const server = createServer((request, response) => {
     void route(request, response).catch((error: unknown) => sendError(response, error));
   });
@@ -73,22 +85,62 @@ export function createService(dependencies: ServiceDependencies): ModelHarborSer
         ],
       });
     }
+    if (method === 'GET' && pathname === '/v1/bench/sessions') {
+      const scope = requestUserScope(request, config);
+      const memories = await plasmod.listMemories(scope);
+      return sendJson(response, 200, { sessions: summarizeSessions(memories) });
+    }
+    if (method === 'GET' && pathname === '/v1/bench/history') {
+      const scope = requestScope(request, config);
+      const [memories, artifacts] = await Promise.all([
+        plasmod.listMemories(scope),
+        plasmod.listBenchmarks(scope),
+      ]);
+      return sendJson(response, 200, historyResponse(scope.sessionId, memories, artifacts));
+    }
+    if (method === 'GET' && pathname === '/v1/bench/memory') {
+      const scope = requestScope(request, config);
+      const memories = await plasmod.listMemories(scope);
+      return sendJson(response, 200, { memories });
+    }
+    if (method === 'GET' && pathname === '/v1/bench/runtime') {
+      return runtimeSnapshot(response);
+    }
     if (method === 'POST' && pathname === '/v1/chat/completions') {
       const scope = requestScope(request, config);
       const body = parseChatRequest(await readJson(request));
+      const requestStarted = monotonicNow();
       const completion = await queue.run(scope.userId, async () => {
+        const admittedAt = monotonicNow();
         const queryText = [...body.messages].reverse().find((message) => message.role === 'user')
           ?.content;
         if (!queryText) throw new HttpError(400, 'INVALID_REQUEST', 'A user message is required.');
+        const memoryStarted = monotonicNow();
         const memory = await plasmod.query({ queryText, scope, topK: config.plasmod.topK });
-        const prompt = assembleMessages(
+        const memoryCompleted = monotonicNow();
+        const context = assembleContext(
           body.messages,
           memory.memories,
           config.limits.contextCharacters
         );
-        const inference = await ollama.chat(prompt);
+        const inferenceStarted = monotonicNow();
+        const inference = await ollama.chat(context.messages);
+        const inferenceCompleted = monotonicNow();
         const occurredAt = now();
         const id = createId();
+        const partialBenchmark = {
+          queueWaitMs: elapsed(requestStarted, admittedAt),
+          memoryQueryMs: elapsed(memoryStarted, memoryCompleted),
+          inferenceMs: elapsed(inferenceStarted, inferenceCompleted),
+          memoryHits: memory.memories.length,
+          inputCharacters: context.inputCharacters,
+          memoryCharacters: context.memoryCharacters,
+          promptCharacters: context.promptCharacters,
+          contextBudgetCharacters: config.limits.contextCharacters,
+          contextTruncated: context.truncated,
+          queue: queue.snapshot(),
+        };
+        const writeStarted = monotonicNow();
         await plasmod.ingestInteraction({
           eventId: id,
           scope,
@@ -96,8 +148,27 @@ export function createService(dependencies: ServiceDependencies): ModelHarborSer
           assistantText: inference.content,
           occurredAt,
           logicalTimestamp: occurredAt.getTime(),
+          benchmark: partialBenchmark,
         });
-        return { id, occurredAt, inference };
+        const interactionPersisted = monotonicNow();
+        const benchmark: TurnBenchmark = {
+          ...partialBenchmark,
+          memoryWriteMs: elapsed(writeStarted, interactionPersisted),
+          totalMs: elapsed(requestStarted, interactionPersisted),
+          persisted: true,
+        };
+        try {
+          await plasmod.persistBenchmark({
+            eventId: id,
+            scope,
+            occurredAt,
+            logicalTimestamp: occurredAt.getTime(),
+            benchmark,
+          });
+        } catch {
+          benchmark.persisted = false;
+        }
+        return { id, occurredAt, inference, benchmark };
       });
       return sendJson(response, 200, {
         id: completion.id,
@@ -117,6 +188,7 @@ export function createService(dependencies: ServiceDependencies): ModelHarborSer
           total_tokens:
             completion.inference.promptTokens + completion.inference.completionTokens,
         },
+        benchmark: completion.benchmark,
       });
     }
     if (method === 'POST' && pathname === '/v1/memory/query') {
@@ -131,7 +203,36 @@ export function createService(dependencies: ServiceDependencies): ModelHarborSer
       );
       return sendJson(response, 200, { memories: result.memories, evidence: result.raw });
     }
+    if (method === 'GET' && (pathname === '/' || pathname.startsWith('/assets/'))) {
+      if (await sendWebAsset(response, webRoot, pathname)) return;
+    }
     throw new HttpError(404, 'NOT_FOUND', 'Route not found.');
+  }
+
+  async function runtimeSnapshot(response: ServerResponse): Promise<void> {
+    const [ollamaState, plasmodState, plasmodMetrics] = await Promise.allSettled([
+      ollama.health(),
+      plasmod.health(),
+      plasmod.metrics(),
+    ]);
+    sendJson(response, 200, {
+      service: 'ModelHarbor',
+      provider: 'ollama',
+      model: config.ollama.model,
+      context: {
+        tokens: config.ollama.contextTokens,
+        character_budget: config.limits.contextCharacters,
+        trimming: 'newest-first with recalled-memory truncation',
+      },
+      kv_cache: { manager: 'ollama', type: config.ollama.kvCacheType },
+      admission: { limits: config.limits, current: queue.snapshot() },
+      dependencies: {
+        ollama: ollamaState.status === 'fulfilled' ? 'ready' : 'unavailable',
+        plasmod: plasmodState.status === 'fulfilled' ? 'ready' : 'unavailable',
+        hyphaContract: 'ready',
+      },
+      plasmod_metrics: plasmodMetrics.status === 'fulfilled' ? plasmodMetrics.value : null,
+    });
   }
 
   async function readiness(response: ServerResponse): Promise<void> {
@@ -167,6 +268,15 @@ export function createService(dependencies: ServiceDependencies): ModelHarborSer
       await once(server, 'close');
     },
   };
+}
+
+function requestUserScope(
+  request: IncomingMessage,
+  config: RuntimeConfig
+): Omit<MemoryScope, 'sessionId'> {
+  const userId = header(request, 'x-user-id');
+  if (!userId) throw new HttpError(400, 'INVALID_SCOPE', 'X-User-ID is required.');
+  return { tenantId: config.agent.tenantId, userId, agentId: config.agent.id };
 }
 
 function requestScope(request: IncomingMessage, config: RuntimeConfig): MemoryScope {
@@ -234,6 +344,112 @@ function parseChatRequest(value: unknown): { messages: ChatMessage[] } {
 
 function isChatRole(value: unknown): value is ChatRole {
   return value === 'system' || value === 'user' || value === 'assistant';
+}
+
+function elapsed(start: number, end: number): number {
+  return Math.max(0, Math.round((end - start) * 100) / 100);
+}
+
+function summarizeSessions(memories: CanonicalMemory[]): Array<Record<string, unknown>> {
+  const sessions = new Map<string, CanonicalMemory[]>();
+  for (const memory of memories) {
+    const entries = sessions.get(memory.session_id) ?? [];
+    entries.push(memory);
+    sessions.set(memory.session_id, entries);
+  }
+  return [...sessions.entries()]
+    .map(([id, entries]) => {
+      const ordered = [...entries].sort(compareMemories);
+      const latest = ordered.at(-1);
+      return {
+        id,
+        turns: entries.length,
+        last_activity: memoryTime(latest),
+        preview: interactionParts(latest?.content ?? '').user || latest?.summary || latest?.content || '',
+      };
+    })
+    .sort((left, right) => String(right.last_activity).localeCompare(String(left.last_activity)));
+}
+
+function historyResponse(
+  sessionId: string,
+  memories: CanonicalMemory[],
+  artifacts: BenchmarkArtifact[]
+): Record<string, unknown> {
+  const benchmarkByEvent = new Map(
+    artifacts.map((artifact) => [artifact.produced_by_event_id, parseBenchmark(artifact.metadata?.body)])
+  );
+  const turns = [...memories].sort(compareMemories).map((memory) => {
+    const parts = interactionParts(memory.content);
+    const eventId = memory.source_event_ids?.[0];
+    return {
+      id: eventId ?? memory.memory_id,
+      memory_id: memory.memory_id,
+      created_at: memoryTime(memory),
+      user: parts.user,
+      assistant: parts.assistant,
+      content: memory.content,
+      benchmark: eventId ? benchmarkByEvent.get(eventId) ?? null : null,
+    };
+  });
+  return { session_id: sessionId, turns };
+}
+
+function interactionParts(content: string): { user: string; assistant: string } {
+  const prefix = 'User: ';
+  const separator = '\nAssistant: ';
+  if (!content.startsWith(prefix)) return { user: '', assistant: '' };
+  const boundary = content.indexOf(separator);
+  if (boundary < 0) return { user: content.slice(prefix.length), assistant: '' };
+  return {
+    user: content.slice(prefix.length, boundary),
+    assistant: content.slice(boundary + separator.length),
+  };
+}
+
+function parseBenchmark(value: string | undefined): unknown {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function compareMemories(left: CanonicalMemory, right: CanonicalMemory): number {
+  const byTime = memoryTime(left).localeCompare(memoryTime(right));
+  return byTime || (left.mutation_lsn ?? 0) - (right.mutation_lsn ?? 0);
+}
+
+function memoryTime(memory: CanonicalMemory | undefined): string {
+  return memory?.materialized_at || memory?.valid_from || '';
+}
+
+async function sendWebAsset(
+  response: ServerResponse,
+  webRoot: string,
+  pathname: string
+): Promise<boolean> {
+  const relative = pathname === '/' ? 'index.html' : pathname.slice(1);
+  const filePath = path.resolve(webRoot, relative);
+  if (filePath !== webRoot && !filePath.startsWith(`${webRoot}${path.sep}`)) return false;
+  try {
+    const content = await readFile(filePath);
+    const contentType = filePath.endsWith('.html')
+      ? 'text/html; charset=utf-8'
+      : filePath.endsWith('.css')
+        ? 'text/css; charset=utf-8'
+        : filePath.endsWith('.js')
+          ? 'text/javascript; charset=utf-8'
+          : 'application/octet-stream';
+    response.writeHead(200, { 'Content-Type': contentType, 'Cache-Control': 'no-cache' });
+    response.end(content);
+    return true;
+  } catch (error) {
+    if (isRecord(error) && error.code === 'ENOENT') return false;
+    throw error;
+  }
 }
 
 function sendError(response: ServerResponse, error: unknown): void {

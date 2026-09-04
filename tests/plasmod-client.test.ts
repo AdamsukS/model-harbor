@@ -10,6 +10,18 @@ const scope = {
 };
 
 const cleanups: Array<() => Promise<void>> = [];
+const benchmark = {
+  queueWaitMs: 1,
+  memoryQueryMs: 2,
+  inferenceMs: 3,
+  memoryHits: 1,
+  inputCharacters: 20,
+  memoryCharacters: 30,
+  promptCharacters: 50,
+  contextBudgetCharacters: 360_000,
+  contextTruncated: false,
+  queue: { active: 1, queued: 0, admittedUsers: 1 },
+};
 afterEach(async () => {
   await Promise.all(cleanups.splice(0).map((cleanup) => cleanup()));
 });
@@ -95,6 +107,7 @@ describe('PlasmodClient', () => {
       assistantText: 'You prefer concise answers.',
       occurredAt: new Date('2026-09-04T03:00:00.000Z'),
       logicalTimestamp: 7,
+      benchmark,
     });
 
     expect(server.requests[0]).toMatchObject({ method: 'POST', pathname: '/v1/ingest/events' });
@@ -120,6 +133,78 @@ describe('PlasmodClient', () => {
         user_text: 'What style do I prefer?',
         assistant_text: 'You prefer concise answers.',
       },
+      extensions: { custom: { model_harbor_bench: benchmark } },
+    });
+  });
+
+  it('reads canonical memories using agent, workspace, and optional session scope', async () => {
+    const server = await startTestServer((request, response) => {
+      expect(request.pathname).toBe('/v1/memory');
+      expect(request.query).toMatchObject({
+        agent_id: 'agent-local',
+        workspace_id: 'user-alice',
+        session_id: 'session-1',
+      });
+      json(response, 200, [
+        {
+          memory_id: 'mem-1',
+          agent_id: 'agent-local',
+          session_id: 'session-1',
+          workspace_id: 'user-alice',
+          content: 'User: Hello\nAssistant: Hi',
+        },
+      ]);
+    });
+    cleanups.push(server.close);
+    const client = new PlasmodClient({ baseUrl: server.baseUrl, timeoutMs: 1_000 });
+
+    await expect(client.listMemories(scope)).resolves.toHaveLength(1);
+  });
+
+  it('persists and reads a scoped benchmark artifact', async () => {
+    const requests: unknown[] = [];
+    const server = await startTestServer((request, response) => {
+      requests.push(request);
+      if (request.method === 'POST') return json(response, 200, { status: 'ok' });
+      return json(response, 200, [
+        {
+          artifact_id: 'art_evt-chat-1',
+          artifact_type: 'model_harbor.benchmark.turn.v1',
+          workspace_id: 'user-alice',
+          session_id: 'session-1',
+          owner_agent_id: 'agent-local',
+          produced_by_event_id: 'evt-chat-1',
+          metadata: { body: '{}' },
+        },
+        {
+          artifact_id: 'art-other',
+          artifact_type: 'model_harbor.benchmark.turn.v1',
+          workspace_id: 'other-user',
+          session_id: 'session-1',
+          owner_agent_id: 'agent-local',
+          produced_by_event_id: 'evt-other',
+        },
+      ]);
+    });
+    cleanups.push(server.close);
+    const client = new PlasmodClient({ baseUrl: server.baseUrl, timeoutMs: 1_000 });
+    const completeBenchmark = { ...benchmark, memoryWriteMs: 4, totalMs: 10, persisted: true };
+
+    await client.persistBenchmark({
+      eventId: 'evt-chat-1',
+      scope,
+      occurredAt: new Date('2026-09-04T03:00:00.000Z'),
+      logicalTimestamp: 7,
+      benchmark: completeBenchmark,
+    });
+    const artifacts = await client.listBenchmarks(scope);
+
+    expect(artifacts.map((artifact) => artifact.artifact_id)).toEqual(['art_evt-chat-1']);
+    expect((requests[0] as { body: Record<string, unknown> }).body).toMatchObject({
+      artifact_id: 'art_evt-chat-1',
+      workspace_id: 'user-alice',
+      artifact_type: 'model_harbor.benchmark.turn.v1',
+      produced_by_event_id: 'evt-chat-1',
     });
   });
 

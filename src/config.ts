@@ -7,6 +7,7 @@ export interface RuntimeConfig {
     model: string;
     sourceModel: string;
     contextTokens: number;
+    kvCacheType: string;
     thinking: boolean;
     timeoutMs: number;
   };
@@ -50,6 +51,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
         131_072,
         'MODEL_HARBOR_CONTEXT_TOKENS'
       ),
+      kvCacheType: stringValue(env.OLLAMA_KV_CACHE_TYPE, 'q4_0', 'OLLAMA_KV_CACHE_TYPE'),
       thinking: booleanValue(env.OLLAMA_THINKING, false, 'OLLAMA_THINKING'),
       timeoutMs: positiveInteger(env.OLLAMA_TIMEOUT_MS, 300_000, 'OLLAMA_TIMEOUT_MS'),
     },

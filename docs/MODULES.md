@@ -16,12 +16,18 @@ The two source forks are pinned in `config/runtime-sources.json` and checked out
 | `src/config.ts` | Strict environment parsing, local defaults, five-user bound, and immutable runtime-source validation. |
 | `src/agent-contract.ts` | Loads and compiles `agent/domain-pack.yaml` through `@codesoul-co/hypha-domain`. |
 | `src/admission-queue.ts` | FIFO admission, single inference concurrency, request bound, and distinct-user accounting. |
-| `src/context.ts` | Marks recalled data as untrusted, preserves recent turns, and enforces a deterministic character budget. |
-| `src/plasmod-client.ts` | Scoped `/v1/query`, Dynamic Event v0.4 ingest, health, and memory-text extraction. |
+| `src/context.ts` | Marks recalled data as untrusted, preserves recent turns, enforces a deterministic character budget, and reports trimming diagnostics. |
+| `src/plasmod-client.ts` | Scoped recall/listing, Dynamic Event v0.4 ingest, benchmark Artifact persistence, health, and metrics. |
 | `src/ollama-client.ts` | Provider-neutral inference interface and Ollama `/api/chat` protocol adapter. |
 | `src/dependency-error.ts` | Timeouts, JSON/status normalization, and dependency error classification. |
-| `src/service.ts` | HTTP validation, readiness, memory/inference orchestration, OpenAI-compatible response, and shutdown. |
+| `src/service.ts` | HTTP validation, readiness, memory/inference orchestration, Bench APIs/static assets, OpenAI-compatible response, and shutdown. |
 | `src/main.ts` | Production composition and signal handling. |
+
+## Agent Bench
+
+`web/` is a React/Vite single-page interface served by the same ModelHarbor process. It calls only
+ModelHarbor endpoints; Plasmod's admin/data APIs are not exposed directly to browser code. The four
+views are Chat, History, Memory, and Runtime. There is deliberately no frontend database or router.
 
 ## Agent definition
 
@@ -45,7 +51,9 @@ For each successful Chat request:
 2. query only Memory objects from Plasmod;
 3. insert extracted evidence into a tagged untrusted system block;
 4. generate through the inference interface;
-5. ingest a strict, stable-ID Plasmod event containing user and assistant text.
+5. ingest a strict, stable-ID Plasmod event containing user and assistant text;
+6. persist the completed turn measurements as a scoped canonical Plasmod Artifact linked by the
+   originating event ID.
 
 Plasmod's canonical object and WAL storage are authoritative. Prompt projections and Ollama KV
 state are disposable acceleration layers. Startup replays the retained WAL through Plasmod's

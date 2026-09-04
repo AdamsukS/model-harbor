@@ -8,8 +8,10 @@
     "node": ">=22.0.0 <23.0.0"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && vite build",
+    "build:web": "vite build",
     "dev": "tsx src/main.ts",
+    "dev:web": "vite --host 127.0.0.1",
     "start": "bash scripts/start.sh",
     "start:app": "node dist/src/main.js",
     "runtime:prepare": "bash scripts/prepare.sh",
@@ -17,17 +19,23 @@
     "smoke": "bash scripts/smoke.sh",
     "stop": "bash scripts/stop.sh",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit"
   },
   "dependencies": {
     "@codesoul-co/hypha-core": "1.0.1",
     "@codesoul-co/hypha-domain": "1.0.1",
-    "@codesoul-co/hypha-memory": "1.0.1"
+    "@codesoul-co/hypha-memory": "1.0.1",
+    "react": "19.1.1",
+    "react-dom": "19.1.1"
   },
   "devDependencies": {
     "@types/node": "24.10.1",
+    "@types/react": "19.1.12",
+    "@types/react-dom": "19.1.9",
+    "@vitejs/plugin-react": "5.0.2",
     "tsx": "4.23.13",
     "typescript": "5.9.3",
+    "vite": "7.1.4",
     "vitest": "3.2.7"
   },
   "packageManager": "pnpm@11.19.0"

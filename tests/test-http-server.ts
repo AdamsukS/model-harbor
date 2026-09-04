@@ -4,6 +4,7 @@ import { once } from 'node:events';
 export interface RecordedRequest {
   method: string;
   pathname: string;
+  query: Record<string, string>;
   body: unknown;
 }
 
@@ -18,11 +19,16 @@ export async function startTestServer(
     const chunks: Buffer[] = [];
     for await (const chunk of request) chunks.push(Buffer.from(chunk));
     const text = Buffer.concat(chunks).toString('utf8');
-    const recorded: RecordedRequest = {
+    const url = new URL(request.url ?? '/', 'http://localhost');
+    const recorded = {
       method: request.method ?? 'GET',
-      pathname: new URL(request.url ?? '/', 'http://localhost').pathname,
+      pathname: url.pathname,
       body: text ? (JSON.parse(text) as unknown) : undefined,
-    };
+    } as RecordedRequest;
+    Object.defineProperty(recorded, 'query', {
+      value: Object.fromEntries(url.searchParams),
+      enumerable: false,
+    });
     requests.push(recorded);
     await handler(recorded, response);
   });

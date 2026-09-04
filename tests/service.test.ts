@@ -29,6 +29,36 @@ async function startDependencies(options: { ollamaStatus?: number; delayed?: boo
       order.push('plasmod:ingest');
       return json(response, 200, { accepted: true });
     }
+    if (request.pathname === '/v1/memory') {
+      return json(response, 200, [
+        {
+          memory_id: 'mem-chatcmpl-test',
+          agent_id: 'agent.model-harbor.local',
+          session_id: 'session-1',
+          workspace_id: 'user-alice',
+          content: 'User: How should you answer?\nAssistant: A concise response.',
+          source_event_ids: ['chatcmpl-test'],
+          materialized_at: '2026-09-04T04:00:00.000Z',
+        },
+      ]);
+    }
+    if (request.pathname === '/v1/artifacts') {
+      if (request.method === 'POST') return json(response, 200, { status: 'ok' });
+      return json(response, 200, [
+        {
+          artifact_id: 'art_chatcmpl-test',
+          artifact_type: 'model_harbor.benchmark.turn.v1',
+          workspace_id: 'user-alice',
+          session_id: 'session-1',
+          owner_agent_id: 'agent.model-harbor.local',
+          produced_by_event_id: 'chatcmpl-test',
+          metadata: { body: JSON.stringify({ totalMs: 12, memoryHits: 1 }) },
+        },
+      ]);
+    }
+    if (request.pathname === '/v1/admin/metrics') {
+      return json(response, 200, { storage_memory_count: 1, query_total: 1 });
+    }
     return json(response, 404, {});
   });
   const ollama = await startTestServer(async (request, response) => {
@@ -138,8 +168,49 @@ describe('ModelHarbor service', () => {
       model: 'qwen3.5:9b-128k',
       choices: [{ message: { role: 'assistant', content: 'A concise response.' } }],
       usage: { prompt_tokens: 12, completion_tokens: 4, total_tokens: 16 },
+      benchmark: {
+        memoryHits: 1,
+        contextBudgetCharacters: 360_000,
+        contextTruncated: false,
+        persisted: true,
+      },
     });
     expect(dependency.order).toEqual(['plasmod:query', 'ollama:chat', 'plasmod:ingest']);
+  });
+
+  it('exposes scoped sessions, history, memory, and runtime data for the Bench', async () => {
+    const dependency = await startDependencies();
+    const { baseUrl } = await startModelHarbor(dependency);
+    const scopedHeaders = { 'X-User-ID': 'user-alice', 'X-Session-ID': 'session-1' };
+
+    const [sessions, history, memory, runtime] = await Promise.all([
+      fetch(`${baseUrl}/v1/bench/sessions`, { headers: { 'X-User-ID': 'user-alice' } }),
+      fetch(`${baseUrl}/v1/bench/history`, { headers: scopedHeaders }),
+      fetch(`${baseUrl}/v1/bench/memory`, { headers: scopedHeaders }),
+      fetch(`${baseUrl}/v1/bench/runtime`),
+    ]);
+
+    expect(await sessions.json()).toMatchObject({
+      sessions: [{ id: 'session-1', turns: 1, preview: 'How should you answer?' }],
+    });
+    expect(await history.json()).toMatchObject({
+      session_id: 'session-1',
+      turns: [
+        {
+          user: 'How should you answer?',
+          assistant: 'A concise response.',
+          benchmark: { totalMs: 12, memoryHits: 1 },
+        },
+      ],
+    });
+    expect(await memory.json()).toMatchObject({ memories: [{ memory_id: 'mem-chatcmpl-test' }] });
+    expect(await runtime.json()).toMatchObject({
+      provider: 'ollama',
+      context: { tokens: 131_072 },
+      kv_cache: { manager: 'ollama', type: 'q4_0' },
+      dependencies: { ollama: 'ready', plasmod: 'ready', hyphaContract: 'ready' },
+      plasmod_metrics: { storage_memory_count: 1 },
+    });
   });
 
   it('uses configured tenant and Agent identity for the memory scope', async () => {

@@ -99,9 +99,25 @@ Response:
     "prompt_tokens": 100,
     "completion_tokens": 20,
     "total_tokens": 120
+  },
+  "benchmark": {
+    "queueWaitMs": 0.2,
+    "memoryQueryMs": 4.1,
+    "inferenceMs": 1280.5,
+    "memoryWriteMs": 3.7,
+    "totalMs": 1288.5,
+    "memoryHits": 2,
+    "promptCharacters": 942,
+    "contextBudgetCharacters": 360000,
+    "contextTruncated": false,
+    "persisted": true
   }
 }
 ```
+
+`persisted` describes the companion benchmark Artifact. The completed interaction Memory remains
+the success boundary for the Chat request; a metrics-only write failure does not discard a valid
+model response.
 
 ## `POST /v1/memory/query`
 
@@ -116,6 +132,30 @@ The response contains extracted text plus Plasmod's structured evidence envelope
 ```json
 {"memories":["The user prefers concise answers."],"evidence":{}}
 ```
+
+## Agent Bench APIs
+
+The bundled UI uses these same-origin endpoints. They are stable backend boundaries for future
+gateways; clients should not call Plasmod directly.
+
+### `GET /v1/bench/sessions`
+
+Requires `X-User-ID`. Returns sessions derived from canonical Plasmod Memory records in that user
+workspace.
+
+### `GET /v1/bench/history`
+
+Requires both scope headers. Returns ordered conversation turns and any linked per-turn benchmark
+Artifact.
+
+### `GET /v1/bench/memory`
+
+Requires both scope headers. Returns canonical Plasmod Memory records for the selected Session.
+
+### `GET /v1/bench/runtime`
+
+Returns the configured model and context window, KV-cache manager/type, live admission snapshot,
+dependency health, and aggregate Plasmod metrics. It does not expose internal dependency URLs.
 
 ## Admission and status codes
 

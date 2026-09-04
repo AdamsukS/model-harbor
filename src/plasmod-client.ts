@@ -35,6 +35,52 @@ export interface InteractionInput {
   assistantText: string;
   occurredAt: Date;
   logicalTimestamp: number;
+  benchmark: Omit<TurnBenchmark, 'memoryWriteMs' | 'totalMs' | 'persisted'>;
+}
+
+export interface TurnBenchmark {
+  queueWaitMs: number;
+  memoryQueryMs: number;
+  inferenceMs: number;
+  memoryWriteMs: number;
+  totalMs: number;
+  memoryHits: number;
+  inputCharacters: number;
+  memoryCharacters: number;
+  promptCharacters: number;
+  contextBudgetCharacters: number;
+  contextTruncated: boolean;
+  queue: { active: number; queued: number; admittedUsers: number };
+  persisted: boolean;
+}
+
+export interface CanonicalMemory {
+  memory_id: string;
+  agent_id: string;
+  session_id: string;
+  workspace_id?: string;
+  scope?: string;
+  content: string;
+  summary?: string;
+  source_event_ids?: string[];
+  valid_from?: string;
+  materialized_at?: string;
+  mutation_lsn?: number;
+  importance?: number;
+  confidence?: number;
+  lifecycle_state?: string;
+  is_active?: boolean;
+  access?: Record<string, unknown>;
+}
+
+export interface BenchmarkArtifact {
+  artifact_id: string;
+  session_id: string;
+  workspace_id?: string;
+  owner_agent_id: string;
+  produced_by_event_id: string;
+  materialized_at?: string;
+  metadata?: { body?: string; name?: string };
 }
 
 export class PlasmodClient {
@@ -99,10 +145,82 @@ export class PlasmodClient {
             user_text: input.userText,
             assistant_text: input.assistantText,
           },
+          extensions: { custom: { model_harbor_bench: input.benchmark } },
         }),
       },
       signal
     );
+  }
+
+  async persistBenchmark(input: {
+    eventId: string;
+    scope: MemoryScope;
+    occurredAt: Date;
+    logicalTimestamp: number;
+    benchmark: TurnBenchmark;
+  }, signal?: AbortSignal): Promise<unknown> {
+    return this.request(
+      '/v1/artifacts',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          artifact_id: `art_${input.eventId}`,
+          tenant_id: input.scope.tenantId,
+          workspace_id: input.scope.userId,
+          session_id: input.scope.sessionId,
+          owner_agent_id: input.scope.agentId,
+          artifact_type: 'model_harbor.benchmark.turn.v1',
+          content_ref: 'inline',
+          mime_type: 'application/json',
+          metadata: {
+            name: `turn:${input.eventId}`,
+            body: JSON.stringify(input.benchmark),
+          },
+          produced_by_event_id: input.eventId,
+          version: input.logicalTimestamp,
+          materialized_at: input.occurredAt.toISOString(),
+          access: {
+            tenant_id: input.scope.tenantId,
+            workspace_id: input.scope.userId,
+            owner_agent_id: input.scope.agentId,
+            session_id: input.scope.sessionId,
+            visibility: 'workspace',
+          },
+        }),
+      },
+      signal
+    );
+  }
+
+  async listMemories(
+    scope: Omit<MemoryScope, 'sessionId'> & { sessionId?: string },
+    signal?: AbortSignal
+  ): Promise<CanonicalMemory[]> {
+    const query = new URLSearchParams({
+      agent_id: scope.agentId,
+      workspace_id: scope.userId,
+    });
+    if (scope.sessionId) query.set('session_id', scope.sessionId);
+    const raw = await this.request(`/v1/memory?${query.toString()}`, { method: 'GET' }, signal);
+    if (!Array.isArray(raw)) return [];
+    return raw.filter(isCanonicalMemory);
+  }
+
+  async listBenchmarks(scope: MemoryScope, signal?: AbortSignal): Promise<BenchmarkArtifact[]> {
+    const query = new URLSearchParams({ session_id: scope.sessionId });
+    const raw = await this.request(`/v1/artifacts?${query.toString()}`, { method: 'GET' }, signal);
+    if (!Array.isArray(raw)) return [];
+    return raw.filter(
+      (value): value is BenchmarkArtifact =>
+        isBenchmarkArtifact(value) &&
+        value.workspace_id === scope.userId &&
+        value.owner_agent_id === scope.agentId
+    );
+  }
+
+  async metrics(signal?: AbortSignal): Promise<unknown> {
+    return this.request('/v1/admin/metrics?storage=true', { method: 'GET' }, signal);
   }
 
   private async request(pathname: string, init: RequestInit, signal?: AbortSignal): Promise<unknown> {
@@ -119,6 +237,27 @@ export class PlasmodClient {
     }
     return parseJsonResponse('plasmod', response);
   }
+}
+
+function isCanonicalMemory(value: unknown): value is CanonicalMemory {
+  return (
+    isRecord(value) &&
+    typeof value.memory_id === 'string' &&
+    typeof value.agent_id === 'string' &&
+    typeof value.session_id === 'string' &&
+    typeof value.content === 'string'
+  );
+}
+
+function isBenchmarkArtifact(value: unknown): value is BenchmarkArtifact {
+  return (
+    isRecord(value) &&
+    value.artifact_type === 'model_harbor.benchmark.turn.v1' &&
+    typeof value.artifact_id === 'string' &&
+    typeof value.session_id === 'string' &&
+    typeof value.owner_agent_id === 'string' &&
+    typeof value.produced_by_event_id === 'string'
+  );
 }
 
 function extractMemoryText(value: unknown): string[] {

@@ -18,6 +18,7 @@ profile.
 - Default branch: `next` (TypeScript + Go + native inference, no Python runtime)
 - Previous baseline: `main` (MLX-LM/Python)
 - API: `http://127.0.0.1:8787/v1`
+- Agent Bench: `http://127.0.0.1:8787`
 - Inference model: `qwen3.5:9b-q4_K_M`, exposed locally as `qwen3.5:9b-128k`
 - Requested context: 128K tokens
 - Scheduling: one generation at a time, five total admitted requests, five admitted users maximum
@@ -70,6 +71,10 @@ pnpm run health
 pnpm run smoke
 ```
 
+Open `http://127.0.0.1:8787` for the same-origin Agent Bench. It provides Chat, durable Session
+history, canonical Plasmod Memory inspection, and runtime/KV/queue measurements. The browser keeps
+only UI preferences; Plasmod remains the persistence authority.
+
 Preparation is idempotent. It refuses to change a dirty Hypha or Plasmod checkout. Runtime state,
 logs, PID files, Plasmod data, and source checkouts stay outside Git.
 
@@ -118,4 +123,3 @@ prefix, and KV-cache experiments.
 - [API reference](docs/API.md)
 - [Modules and maintenance](docs/MODULES.md)
 - [Operations guide](docs/OPERATIONS.md)
-- [Architecture design](docs/superpowers/specs/2026-09-04-hypha-plasmod-local-runtime-design.md)

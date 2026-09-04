@@ -40,6 +40,12 @@ pnpm start
 pnpm run health
 ```
 
+Open the local Bench after startup:
+
+```text
+http://127.0.0.1:8787
+```
+
 Startup order is Ollama, Plasmod, and then ModelHarbor. Each step waits for an HTTP readiness
 condition rather than sleeping for a fixed duration. After Plasmod starts, the lifecycle script
 uses its official admin replay endpoint to rebuild the disposable retrieval projection from the
@@ -95,6 +101,7 @@ MODEL_HARBOR_QUEUE_SIZE=5
 MODEL_HARBOR_CONTEXT_TOKENS=131072
 MODEL_HARBOR_CONTEXT_CHARACTERS=360000
 OLLAMA_MODEL=qwen3.5:9b-128k
+OLLAMA_KV_CACHE_TYPE=q4_0
 OLLAMA_THINKING=false
 PLASMOD_TOP_K=5
 PLASMOD_REPLAY_ON_START=1

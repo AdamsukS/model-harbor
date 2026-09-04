@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assembleMessages, type ChatMessage } from '../src/context';
+import { assembleContext, assembleMessages, type ChatMessage } from '../src/context';
 
 describe('assembleMessages', () => {
   it('labels recalled memory as untrusted context', () => {
@@ -43,5 +43,18 @@ describe('assembleMessages', () => {
     );
     expect(result[0]?.content).toContain('[truncated]');
     expect(result.at(-1)?.content).toBe('latest question');
+  });
+
+  it('reports the context budget used by a turn', () => {
+    const result = assembleContext(
+      [{ role: 'user', content: `question-${'q'.repeat(80)}` }],
+      [`memory-${'m'.repeat(200)}`],
+      100
+    );
+
+    expect(result.promptCharacters).toBeLessThanOrEqual(100);
+    expect(result.inputCharacters).toBe(89);
+    expect(result.memoryCharacters).toBe(207);
+    expect(result.truncated).toBe(true);
   });
 });

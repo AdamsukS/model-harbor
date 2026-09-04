@@ -15,6 +15,7 @@ describe('loadConfig', () => {
         model: 'qwen3.5:9b-128k',
         sourceModel: 'qwen3.5:9b-q4_K_M',
         contextTokens: 131_072,
+        kvCacheType: 'q4_0',
         thinking: false,
         timeoutMs: 300_000,
       },
