@@ -9,7 +9,7 @@ import signal
 import socket
 import subprocess
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any, Literal
 from urllib.request import Request, urlopen
 
@@ -48,7 +48,7 @@ def mlx_command(config: ServiceConfig) -> list[str]:
 
 def mlx_environment(
     config: ServiceConfig,
-    base: dict[str, str] | os._Environ[str] | None = None,
+    base: Mapping[str, str] | None = None,
 ) -> dict[str, str]:
     """Prevent runtime network model resolution and expose local imports."""
     environment = dict(os.environ if base is None else base)
@@ -60,6 +60,44 @@ def mlx_environment(
         }
     )
     return environment
+
+
+def sglang_command(
+    config: ServiceConfig,
+    base: Mapping[str, str] | None = None,
+) -> tuple[dict[str, str], list[str]]:
+    """Build an isolated SGLang command using its MLX runtime backend."""
+    environment = dict(os.environ if base is None else base)
+    environment.update(
+        {
+            "SGLANG_USE_MLX": "1",
+            "SGLANG_MLX_CLEAR_CACHE_STEPS": "256",
+            "HF_HUB_OFFLINE": "1",
+            "TRANSFORMERS_OFFLINE": "1",
+            "PYTHONPATH": str(config.root),
+        }
+    )
+    command = [
+        str(config.root / ".venv-sglang/bin/python"),
+        "-m",
+        "sglang.launch_server",
+        "--model-path",
+        str(config.model_dir),
+        "--served-model-name",
+        "default_model",
+        "--host",
+        config.host,
+        "--port",
+        str(config.port + 1),
+        "--disable-cuda-graph",
+        "--context-length",
+        "131072",
+        "--reasoning-parser",
+        "qwen3",
+        "--tool-call-parser",
+        "qwen3_coder",
+    ]
+    return environment, command
 
 
 def _pid_path(config: ServiceConfig, backend: str) -> Path:
@@ -122,14 +160,19 @@ def wait_for_port(
 
 def start_backend(backend: BackendName, config: ServiceConfig) -> int:
     """Start a managed backend in the background and return its PID."""
-    if backend != "mlx":
-        raise RuntimeError(f"backend {backend!r} is not prepared")
     if not (config.model_dir / "config.json").is_file():
         raise RuntimeError("local model is missing; run scripts/prepare.sh first")
 
-    command = mlx_command(config)
+    if backend == "mlx":
+        command = mlx_command(config)
+        environment = mlx_environment(config)
+        listen_port = config.port
+    else:
+        environment, command = sglang_command(config)
+        listen_port = config.port + 1
     if not Path(command[0]).is_file():
-        raise RuntimeError("MLX-LM is missing; run scripts/prepare.sh first")
+        prepare_script = "scripts/prepare.sh" if backend == "mlx" else "scripts/prepare-sglang.sh"
+        raise RuntimeError(f"{backend} runtime is missing; run {prepare_script} first")
 
     pid_path = _pid_path(config, backend)
     if pid_path.exists():
@@ -144,7 +187,7 @@ def start_backend(backend: BackendName, config: ServiceConfig) -> int:
         child = subprocess.Popen(
             command,
             cwd=config.root,
-            env=mlx_environment(config),
+            env=environment,
             stdout=log_file,
             stderr=subprocess.STDOUT,
             start_new_session=True,
@@ -154,7 +197,7 @@ def start_backend(backend: BackendName, config: ServiceConfig) -> int:
         tail = log_path.read_text(encoding="utf-8", errors="replace")[-4000:]
         raise RuntimeError(f"{backend} backend exited during startup:\n{tail}")
     try:
-        wait_for_port(config.host, config.port)
+        wait_for_port(config.host, listen_port)
     except TimeoutError:
         child.terminate()
         child.wait(timeout=15)
