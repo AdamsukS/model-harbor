@@ -10,7 +10,12 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/main.ts",
-    "start": "node dist/main.js",
+    "start": "bash scripts/start.sh",
+    "start:app": "node dist/src/main.js",
+    "runtime:prepare": "bash scripts/prepare.sh",
+    "health": "bash scripts/health.sh",
+    "smoke": "bash scripts/smoke.sh",
+    "stop": "bash scripts/stop.sh",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
