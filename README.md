@@ -47,7 +47,8 @@ published Hypha npm packages through the framework's documented product boundary
 ## Requirements
 
 - macOS on Apple Silicon
-- Node.js 22 or newer, including npm
+- Node.js 22 LTS, including npm (the full Hypha checkout currently pins a native SQLite addon that
+  is not compatible with Node 26)
 - pnpm 11
 - Go 1.25 or newer
 - Ollama
@@ -56,7 +57,7 @@ published Hypha npm packages through the framework's documented product boundary
 Homebrew can install the missing system tools:
 
 ```bash
-brew install node pnpm go ollama
+brew install node@22 pnpm go ollama
 ```
 
 ## Quick start
@@ -102,8 +103,10 @@ automatic memory summarization, and direct llama.cpp KV experiments will be adde
 ## 128K and KV cache
 
 The Ollama model profile requests `131072` tokens and starts with Flash Attention, one loaded model,
-one parallel generation, and a quantized `q4_0` KV cache. ModelHarbor also limits the assembled
-prompt to 360,000 characters, retaining the newest turns first and truncating recalled memory.
+one parallel generation, and a quantized `q4_0` KV cache. Thinking is disabled by default to keep
+interactive queue latency bounded and can be enabled with `OLLAMA_THINKING=true`. ModelHarbor also
+limits the assembled prompt to 360,000 characters, retaining the newest turns first and truncating
+recalled memory.
 
 On a 16 GiB Mac, 128K is an experimental capacity target rather than a guarantee for every prompt.
 Model weights, KV cache, runtime buffers, Plasmod, and Node share unified memory. The next inference

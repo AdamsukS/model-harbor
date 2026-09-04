@@ -34,7 +34,7 @@ printf '%s' "$MEMORY_RESPONSE" | "$NODE_EXEC" -e '
   process.stdin.on("data", chunk => text += chunk);
   process.stdin.on("end", () => {
     const value = JSON.parse(text);
-    if (!Array.isArray(value.memories)) process.exit(1);
+    if (!Array.isArray(value.memories) || value.memories.length === 0) process.exit(1);
     process.stdout.write(`memory records: ${value.memories.length}\n`);
   });
 '

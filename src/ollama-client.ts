@@ -10,6 +10,7 @@ export interface OllamaClientOptions {
   baseUrl: string;
   model: string;
   contextTokens: number;
+  thinking: boolean;
   timeoutMs: number;
 }
 
@@ -50,6 +51,7 @@ export class OllamaClient implements InferenceClient {
           model: this.options.model,
           messages,
           stream: false,
+          think: this.options.thinking,
           options: { num_ctx: this.options.contextTokens },
         }),
       },

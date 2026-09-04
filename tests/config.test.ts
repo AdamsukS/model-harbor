@@ -15,6 +15,7 @@ describe('loadConfig', () => {
         model: 'qwen3.5:9b-128k',
         sourceModel: 'qwen3.5:9b-q4_K_M',
         contextTokens: 131_072,
+        thinking: false,
         timeoutMs: 300_000,
       },
       plasmod: {
@@ -54,6 +55,11 @@ describe('loadConfig', () => {
 
     expect(config.ollama.baseUrl).toBe('http://localhost:11434');
     expect(config.plasmod.baseUrl).toBe('http://localhost:8080');
+  });
+
+  it('allows deliberate opt-in to model thinking', () => {
+    expect(loadConfig({ OLLAMA_THINKING: 'true' }).ollama.thinking).toBe(true);
+    expect(() => loadConfig({ OLLAMA_THINKING: 'sometimes' })).toThrow('OLLAMA_THINKING');
   });
 });
 

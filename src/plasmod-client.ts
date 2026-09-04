@@ -122,16 +122,29 @@ export class PlasmodClient {
 }
 
 function extractMemoryText(value: unknown): string[] {
-  if (!isRecord(value) || !Array.isArray(value.objects)) return [];
-  return value.objects.flatMap((candidate) => {
-    if (!isRecord(candidate)) return [];
-    const direct = firstText(candidate.content, candidate.summary);
-    if (direct) return [direct];
-    const payload = candidate.payload;
-    return isRecord(payload) && typeof payload.text === 'string' && payload.text.trim()
-      ? [payload.text.trim()]
-      : [];
-  });
+  if (!isRecord(value)) return [];
+  const texts: string[] = [];
+  if (Array.isArray(value.objects)) {
+    for (const candidate of value.objects) {
+      if (!isRecord(candidate)) continue;
+      const direct = firstText(candidate.content, candidate.summary);
+      if (direct) texts.push(direct);
+      const payload = candidate.payload;
+      const payloadText = isRecord(payload) ? firstText(payload.text) : undefined;
+      if (!direct && payloadText) texts.push(payloadText);
+    }
+  }
+  if (Array.isArray(value.nodes)) {
+    for (const candidate of value.nodes) {
+      if (!isRecord(candidate) || candidate.object_type !== 'memory') continue;
+      const properties = candidate.properties;
+      const text = isRecord(properties)
+        ? firstText(properties.content, properties.summary, candidate.label)
+        : firstText(candidate.label);
+      if (text) texts.push(text);
+    }
+  }
+  return [...new Set(texts)];
 }
 
 function firstText(...values: unknown[]): string | undefined {

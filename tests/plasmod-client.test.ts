@@ -50,6 +50,37 @@ describe('PlasmodClient', () => {
     ]);
   });
 
+  it('extracts memory text from Plasmod structured-evidence nodes', async () => {
+    const server = await startTestServer((_request, response) => {
+      json(response, 200, {
+        objects: ['mem-chat-1'],
+        nodes: [
+          {
+            object_id: 'mem-chat-1',
+            object_type: 'memory',
+            label: 'User: Hello\nAssistant: Hi.',
+            properties: {
+              content: 'User: Hello\nAssistant: Hi.',
+              summary: 'A short greeting.',
+            },
+          },
+          {
+            object_id: 'event-1',
+            object_type: 'event',
+            label: 'Must not be returned as memory.',
+          },
+        ],
+        query_status: 'ok',
+      });
+    });
+    cleanups.push(server.close);
+    const client = new PlasmodClient({ baseUrl: server.baseUrl, timeoutMs: 1_000 });
+
+    const result = await client.query({ queryText: 'greeting', scope, topK: 5 });
+
+    expect(result.memories).toEqual(['User: Hello\nAssistant: Hi.']);
+  });
+
   it('ingests a strict Dynamic Event v0.4 interaction', async () => {
     const server = await startTestServer((_request, response) => {
       json(response, 200, { accepted: true, lsn: 4 });

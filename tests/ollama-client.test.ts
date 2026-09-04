@@ -23,6 +23,7 @@ describe('OllamaClient', () => {
       baseUrl: server.baseUrl,
       model: 'qwen3.5:9b-128k',
       contextTokens: 131_072,
+      thinking: false,
       timeoutMs: 1_000,
     });
 
@@ -35,6 +36,7 @@ describe('OllamaClient', () => {
         model: 'qwen3.5:9b-128k',
         messages: [{ role: 'user', content: 'Hello' }],
         stream: false,
+        think: false,
         options: { num_ctx: 131_072 },
       },
     });
@@ -57,6 +59,7 @@ describe('OllamaClient', () => {
         baseUrl: server.baseUrl,
         model: 'qwen3.5:9b-128k',
         contextTokens: 131_072,
+        thinking: false,
         timeoutMs: 1_000,
       }).chat([{ role: 'user', content: 'Hello' }])
     ).rejects.toThrow('empty assistant content');
@@ -74,6 +77,7 @@ describe('OllamaClient', () => {
         baseUrl: server.baseUrl,
         model: 'qwen3.5:9b-128k',
         contextTokens: 131_072,
+        thinking: false,
         timeoutMs: 1_000,
       }).health()
     ).resolves.toEqual({ modelAvailable: true });
@@ -90,6 +94,7 @@ describe('OllamaClient', () => {
         baseUrl: server.baseUrl,
         model: 'qwen3.5:9b-128k',
         contextTokens: 131_072,
+        thinking: false,
         timeoutMs: 1_000,
       }).chat([{ role: 'user', content: 'Hello' }])
     ).rejects.toMatchObject({ dependency: 'ollama', status: 500 });

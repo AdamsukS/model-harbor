@@ -21,4 +21,9 @@ PLASMOD_GRPC_ENABLED=0 \
 nohup "$BIN_DIR/plasmod" >"$LOG_DIR/plasmod.log" 2>&1 &
 printf '%s\n' "$!" > "$PID_DIR/plasmod.pid"
 wait_http "${PLASMOD_BASE_URL}/healthz" 60
+if [[ "${PLASMOD_REPLAY_ON_START:-1}" == "1" ]]; then
+  curl -fsS -X POST "${PLASMOD_BASE_URL}/v1/admin/replay" \
+    -H 'Content-Type: application/json' \
+    -d '{"from_lsn":1,"apply":true,"confirm":"apply_replay"}' >/dev/null
+fi
 printf 'Plasmod started.\n'

@@ -45,7 +45,8 @@ Hypha 与 Plasmod 不会被复制进项目，也不使用 submodule。`scripts/p
 ## 环境要求
 
 - Apple Silicon macOS
-- Node.js 22 以上版本并包含 npm
+- Node.js 22 LTS 并包含 npm（完整 Hypha checkout 当前锁定的原生 SQLite 依赖尚不兼容
+  Node 26）
 - pnpm 11
 - Go 1.25 以上版本
 - Ollama
@@ -54,7 +55,7 @@ Hypha 与 Plasmod 不会被复制进项目，也不使用 submodule。`scripts/p
 可以通过 Homebrew 安装缺少的工具：
 
 ```bash
-brew install node pnpm go ollama
+brew install node@22 pnpm go ollama
 ```
 
 ## 快速启动
@@ -100,7 +101,8 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 ## 128K 与 KV Cache
 
 Ollama 模型配置请求 `131072` Token。启动参数启用 Flash Attention、最多加载一个模型、
-单路生成，并使用量化 `q4_0` KV Cache。ModelHarbor 还会把实际组装的 Prompt 限制在
+单路生成，并使用量化 `q4_0` KV Cache。默认关闭思考模式以控制交互队列延迟；可通过
+`OLLAMA_THINKING=true` 开启。ModelHarbor 还会把实际组装的 Prompt 限制在
 360,000 字符以内，优先保留最新对话，并裁剪过长的召回 Memory。
 
 在 16 GiB Mac 上，128K 是实验容量目标，并不代表任意 128K 请求都一定能稳定完成。

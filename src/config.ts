@@ -7,6 +7,7 @@ export interface RuntimeConfig {
     model: string;
     sourceModel: string;
     contextTokens: number;
+    thinking: boolean;
     timeoutMs: number;
   };
   plasmod: { baseUrl: string; timeoutMs: number; topK: number };
@@ -49,6 +50,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
         131_072,
         'MODEL_HARBOR_CONTEXT_TOKENS'
       ),
+      thinking: booleanValue(env.OLLAMA_THINKING, false, 'OLLAMA_THINKING'),
       timeoutMs: positiveInteger(env.OLLAMA_TIMEOUT_MS, 300_000, 'OLLAMA_TIMEOUT_MS'),
     },
     plasmod: {
@@ -149,6 +151,14 @@ function stringValue(value: string | undefined, fallback: string, name: string):
   const result = value?.trim() || fallback;
   if (!result) throw new Error(`${name} must not be empty.`);
   return result;
+}
+
+function booleanValue(value: string | undefined, fallback: boolean, name: string): boolean {
+  if (value === undefined || value.trim() === '') return fallback;
+  const normalized = value.trim().toLowerCase();
+  if (normalized === 'true' || normalized === '1') return true;
+  if (normalized === 'false' || normalized === '0') return false;
+  throw new Error(`${name} must be true, false, 1, or 0.`);
 }
 
 function requiredString(value: unknown, name: string): string {

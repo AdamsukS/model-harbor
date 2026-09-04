@@ -48,7 +48,8 @@ For each successful Chat request:
 5. ingest a strict, stable-ID Plasmod event containing user and assistant text.
 
 Plasmod's canonical object and WAL storage are authoritative. Prompt projections and Ollama KV
-state are disposable acceleration layers.
+state are disposable acceleration layers. Startup replays the retained WAL through Plasmod's
+official admin endpoint so its in-process TF-IDF retrieval projection is rebuilt after a restart.
 
 ## Inference and KV extension point
 

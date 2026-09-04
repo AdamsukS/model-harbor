@@ -8,6 +8,10 @@ NODE_EXEC="$(find_node)" || {
   printf 'Node.js 22 or newer is required.\n' >&2
   exit 1
 }
+if (( $("$NODE_EXEC" -p 'Number(process.versions.node.split(".")[0])') < 22 )); then
+  printf 'Node.js 22 or newer is required.\n' >&2
+  exit 1
+fi
 mkdir -p "$RUNTIME_SOURCE_DIR"
 
 clone_source() {
@@ -54,13 +58,22 @@ if [[ "${MODEL_HARBOR_SKIP_INSTALLS:-0}" != "1" ]]; then
   }
   PATH="$(dirname "$NODE_EXEC"):$PATH" "$PNPM_EXEC" install --frozen-lockfile
 
-  if ! command -v npm >/dev/null 2>&1; then
+  NPM_EXEC="${NPM_BIN:-$(dirname "$NODE_EXEC")/npm}"
+  if [[ ! -x "$NPM_EXEC" ]]; then
+    NPM_EXEC="$(command -v npm || true)"
+  fi
+  if [[ -z "$NPM_EXEC" ]]; then
     printf 'npm is required to install the Hypha workspace using its official workflow.\n' >&2
     exit 1
   fi
-  (cd "$RUNTIME_SOURCE_DIR/hypha" && npm ci)
-  (cd "$RUNTIME_SOURCE_DIR/plasmod" && /opt/homebrew/bin/go mod download)
-  (cd "$RUNTIME_SOURCE_DIR/plasmod" && /opt/homebrew/bin/go build -o "$BIN_DIR/plasmod" ./src/cmd/server)
+  (cd "$RUNTIME_SOURCE_DIR/hypha" && PATH="$(dirname "$NODE_EXEC"):$PATH" "$NPM_EXEC" ci)
+  GO_EXEC="${GO_BIN:-$(command -v go || true)}"
+  if [[ -z "$GO_EXEC" ]]; then
+    printf 'Go 1.25 or newer is required to build Plasmod.\n' >&2
+    exit 1
+  fi
+  (cd "$RUNTIME_SOURCE_DIR/plasmod" && "$GO_EXEC" mod download)
+  (cd "$RUNTIME_SOURCE_DIR/plasmod" && "$GO_EXEC" build -o "$BIN_DIR/plasmod" ./src/cmd/server)
 fi
 
 if [[ "${MODEL_HARBOR_SKIP_MODEL:-0}" != "1" ]]; then
@@ -69,6 +82,7 @@ if [[ "${MODEL_HARBOR_SKIP_MODEL:-0}" != "1" ]]; then
     printf 'Ollama is required. Install it with: brew install ollama\n' >&2
     exit 1
   fi
+  "$PROJECT_ROOT/scripts/start-ollama.sh"
   "$OLLAMA_EXEC" pull "${OLLAMA_SOURCE_MODEL}"
   "$OLLAMA_EXEC" create "${OLLAMA_MODEL}" -f "$PROJECT_ROOT/config/ollama/Modelfile"
 fi

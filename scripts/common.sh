@@ -31,6 +31,11 @@ find_node() {
     printf '%s\n' "$NODE_BIN"
     return
   fi
+  local node22="/opt/homebrew/opt/node@22/bin/node"
+  if [[ -x "$node22" ]]; then
+    printf '%s\n' "$node22"
+    return
+  fi
   if command -v node >/dev/null 2>&1; then
     command -v node
     return
