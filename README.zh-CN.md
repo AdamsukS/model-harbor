@@ -2,91 +2,114 @@
 
 [English](README.md)
 
-ModelHarbor 是一个本地优先的推理服务与实验工具集，用于在个人硬件上运行、评测并
-逐步扩展多种大语言模型和推理后端。
+ModelHarbor 是面向个人硬件的本地优先、多模型 Agent 运行服务。当前 `next` 架构使用：
 
-项目当前支持的第一个运行方案是 Apple Silicon 上通过 MLX-LM 运行 Qwen3.5-9B。
-项目级接口保持后端无关，后续可以继续接入其他本地模型与推理引擎。Agent 编排、
-持久化 Memory、摘要、检索和上下文裁剪计划作为独立服务层逐步实现。
+- [Hypha](https://github.com/AdamsukS/Hypha) 管理版本化 Agent 与 DomainPack 合约；
+- [Plasmod](https://github.com/AdamsukS/Plasmod) 管理带作用域隔离的持久化 Agent Memory；
+- [Ollama](https://ollama.com/) 提供不依赖 Python 的 Apple Silicon 原生推理；
+- TypeScript 网关负责有界排队、上下文组装和 OpenAI 兼容 API。
+
+项目名称与公开接口不绑定具体模型，Qwen3.5-9B 只是首个本地模型配置。
 
 ## 当前状态
 
-- API：`http://127.0.0.1:8000/v1`
-- 当前模型：`mlx-community/Qwen3.5-9B-4bit`
-- API 模型别名：`default_model`
-- 模型版本：`8b2b98c00a6b4d291155e4890773ca8f769aee53`
-- 本地模型大小：约 5.57 GiB
-- 运行后端：MLX-LM + MLX + Apple Metal
-- 并发目标：已验证 5 个客户端同时提交并排队完成
-- 上下文目标：128K；32K 已验证，64K 和 128K 为分阶段实验
-- 默认缓存：保留一个 Prompt Cache，内存上限 `1200MB`
-- 网络范围：仅监听本机回环地址，不包含鉴权
-- SGLang：已安装和实测，但当前被其 Qwen3.5 混合 Mamba/Metal 兼容性限制阻塞
+- 默认分支：`next`（TypeScript + Go + 原生推理，不使用 Python 运行时）
+- 旧版基线：`main`（MLX-LM/Python）
+- API：`http://127.0.0.1:8787/v1`
+- 推理模型：`qwen3.5:9b-q4_K_M`，本地配置名为 `qwen3.5:9b-128k`
+- 请求上下文：128K Token
+- 调度：同时只执行一个生成；最多接纳 5 个请求、5 个用户
+- Memory：Plasmod 磁盘存储，按照 tenant、用户和 Session 隔离检索
+- 网络范围：仅本机回环地址
 
-## 快速开始
+已有的 `models/Qwen3.5-9B-4bit` MLX 模型仍保留并被 Git 忽略。Ollama 不能直接读取该
+目录，因此会额外下载 Ollama/GGUF 格式的模型。
 
-要求：Apple Silicon macOS、约 8 GiB 可用磁盘空间，以及
-[`uv`](https://docs.astral.sh/uv/)。在项目目录执行：
+## 架构
 
-```bash
-scripts/prepare.sh
-scripts/start-mlx.sh
-scripts/health.sh
-scripts/smoke.sh
+```text
+客户端
+  -> ModelHarbor :8787
+       -> FIFO 接入队列（1 个执行 / 最多 5 个用户）
+       -> Hypha DomainPack 合约
+       -> Plasmod Memory 检索 :8080
+       -> 有界上下文组装
+       -> Ollama 推理 :11434
+       -> Plasmod 对话事件写入 :8080
 ```
 
-`prepare.sh` 可以重复执行：它会创建固定版本的 Python 环境，并复用已经下载的
-模型文件。`start-mlx.sh` 会等待端口就绪，并把受管理的进程记录写入被 Git 忽略的
-`runtime/` 目录。
+Hypha 与 Plasmod 不会被复制进项目，也不使用 submodule。`scripts/prepare.sh` 会把你的
+两个 fork 固定到指定 commit，并检出到 Git 忽略的 `.runtime/`。ModelHarbor 通过 Hypha
+官方发布的 npm 包使用其产品集成接口。
 
-停止服务：
+## 环境要求
+
+- Apple Silicon macOS
+- Node.js 22 以上版本并包含 npm
+- pnpm 11
+- Go 1.25 以上版本
+- Ollama
+- 约 8 GiB 额外磁盘空间
+
+可以通过 Homebrew 安装缺少的工具：
 
 ```bash
-scripts/stop.sh
+brew install node pnpm go ollama
 ```
 
-日志位于 `runtime/mlx.log`。最小调用示例：
+## 快速启动
 
 ```bash
-curl http://127.0.0.1:8000/v1/chat/completions \
+pnpm install
+pnpm run runtime:prepare
+pnpm start
+pnpm run health
+pnpm run smoke
+```
+
+准备脚本可以重复执行，并会拒绝修改存在未提交内容的 Hypha/Plasmod checkout。运行状态、
+日志、PID、Plasmod 数据以及 fork 源码都不会进入 Git。
+
+停止由 ModelHarbor 启动的进程：
+
+```bash
+pnpm stop
+```
+
+该命令不会删除模型、Memory 数据、fork checkout 或旧 MLX 环境。
+
+## 调用示例
+
+Chat 和 Memory 请求必须带 `X-User-ID` 与 `X-Session-ID`：
+
+```bash
+curl http://127.0.0.1:8787/v1/chat/completions \
   -H 'Content-Type: application/json' \
+  -H 'X-User-ID: local-user-1' \
+  -H 'X-Session-ID: session-1' \
   -d '{
-    "model": "default_model",
-    "messages": [{"role": "user", "content": "你好，只回复 OK"}],
-    "max_tokens": 16,
-    "chat_template_kwargs": {"enable_thinking": false}
+    "model": "local-default",
+    "stream": false,
+    "messages": [{"role": "user", "content": "你好，只回复 OK。"}]
   }'
 ```
 
-调用当前 MLX 服务时必须使用 `default_model`。如果直接传入 Hugging Face 仓库 ID，
-MLX-LM 会把它当作动态加载另一个模型的请求，而本项目会在运行时主动禁止联网解析模型。
+第一阶段仅支持非流式 Chat。工具执行、MCP、完整 Hypha Production Harness、自动摘要以及
+直接 llama.cpp KV 实验会在后续逐步接入。
 
-## 容量与缓存实验
+## 128K 与 KV Cache
 
-默认 Prompt 并发和 Decode 并发都是 `1`。同时到达的请求会在后端等待，避免 5 条
-Decode 流争抢 16 GiB 统一内存。`scripts/smoke.sh` 已验证 5 个并发客户端均能完成。
-这代表当前运行目标，不是严格的接入上限；后续需要由 Agent Gateway 实现用户鉴权、
-限额和显式有界队列。
+Ollama 模型配置请求 `131072` Token。启动参数启用 Flash Attention、最多加载一个模型、
+单路生成，并使用量化 `q4_0` KV Cache。ModelHarbor 还会把实际组装的 Prompt 限制在
+360,000 字符以内，优先保留最新对话，并裁剪过长的召回 Memory。
 
-缓存实验必须按顺序运行：
-
-```bash
-scripts/bench-cache.sh 32k
-scripts/bench-cache.sh 64k
-scripts/bench-cache.sh 128k
-```
-
-64K 实验要求 32K 成功，128K 实验要求 64K 成功。每个请求都带有 Swap Watchdog；
-如果相对预热基线新增 1 GiB Swap，它会终止基准服务。已验证的 32K 实验复用了
-32,714 个缓存 Token，将首 Token 延迟从 `197.879s` 降至 `0.843s`。
-
-在 16 GiB 机器上，128K 是实验目标而不是稳定生产承诺。后续 Agent 层应结合近期
-消息窗口、Memory 检索、历史摘要和确定性裁剪来控制实际 Prompt。
+在 16 GiB Mac 上，128K 是实验容量目标，并不代表任意 128K 请求都一定能稳定完成。
+模型权重、KV Cache、运行缓冲区、Plasmod 与 Node 会共享统一内存。后续可在现有
+`InferenceClient` 接口后接入直接 llama.cpp 后端，以便更细粒度地研究 slot、prefix 与 KV。
 
 ## 文档
 
 - [API 文档](docs/API.md)
-- [模块与维护文档](docs/MODULES.md)
-- [KV Cache 基准](results/cache-baseline.md)
-- [SGLang 兼容性结论](results/sglang-compatibility.md)
-
+- [模块与维护](docs/MODULES.md)
+- [运行维护指南](docs/OPERATIONS.md)
+- [架构设计](docs/superpowers/specs/2026-09-04-hypha-plasmod-local-runtime-design.md)
