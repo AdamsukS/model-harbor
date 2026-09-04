@@ -22,6 +22,19 @@ def test_readme_has_complete_operator_flow() -> None:
     assert "5" in text
 
 
+def test_readme_is_bilingual() -> None:
+    text = read("README.md")
+
+    assert "## 中文" in text
+    assert "## English" in text
+    assert "当前状态" in text
+    assert "快速开始" in text
+    assert "缓存实验" in text
+    assert "Current status" in text
+    assert "Quick start" in text
+    assert "Cache experiments" in text
+
+
 def test_api_document_covers_supported_protocol() -> None:
     text = read("docs/API.md")
 
