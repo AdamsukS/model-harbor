@@ -1,0 +1,12 @@
+{
+  "hypha": {
+    "repository": "https://github.com/AdamsukS/Hypha.git",
+    "revision": "ac80a8f7d1fbc8136b3bd85d94c48cf6e18dedf5",
+    "directory": "hypha"
+  },
+  "plasmod": {
+    "repository": "https://github.com/AdamsukS/Plasmod.git",
+    "revision": "26ae0b58cae7798d106d65ca1a4bd8120828a011",
+    "directory": "plasmod"
+  }
+}
