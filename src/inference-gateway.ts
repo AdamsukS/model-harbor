@@ -18,6 +18,7 @@ export interface Options {
 
 const BODY_LIMIT = 2 * 1024 * 1024;
 const MAX_TOKENS = 16384;
+const REQUEST_TIMEOUT_MS = 1_800_000;
 export const hashKey = (key: string): string => createHash('sha256').update(key).digest('hex');
 const fault = (status: number, message: string) => Object.assign(new Error(message), { status });
 const object = (value: unknown): value is Record<string, unknown> =>
@@ -147,7 +148,7 @@ export function createInferenceGateway(options: Options) {
       usage_source: usage ? 'backend' : 'not_reported',
     });
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? 600_000);
+    const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? REQUEST_TIMEOUT_MS);
     const disconnected = () => { if (!res.writableFinished) controller.abort(); };
     res.once('close', disconnected);
     req.setTimeout(30_000, () => { controller.abort(); req.destroy(); });
@@ -244,6 +245,7 @@ if (require.main === module) {
   const server = createInferenceGateway({
     upstream: config.upstream ?? 'http://127.0.0.1:11434', model: config.model ?? 'qwen3.5:9b-128k', keys,
     maxTokens: config.maxTokens ?? MAX_TOKENS,
+    timeoutMs: (config.timeoutSeconds ?? REQUEST_TIMEOUT_MS / 1000) * 1000,
     log: event => {
       try { appendFileSync(`${logDir}/${new Date().toISOString().slice(0, 10)}.jsonl`, `${JSON.stringify(event)}\n`, { mode: 0o600 }); }
       catch { console.error('Unable to write inference access log.'); }

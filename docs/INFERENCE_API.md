@@ -65,7 +65,7 @@ from openai import OpenAI
 client = OpenAI(
     base_url=os.environ["OPENAI_BASE_URL"],
     api_key=os.environ["OPENAI_API_KEY"],
-    timeout=660,
+    timeout=1860,
 )
 response = client.chat.completions.create(
     model=os.environ.get("OPENAI_MODEL", "local-default"),
@@ -102,6 +102,9 @@ for chunk in stream:
 原始协议为 SSE，以 `data: [DONE]` 结束。最后的用量块通常是 `choices: []`，请勿无条件读取
 `choices[0]`。网关默认开启流式用量，也接受显式的 `include_usage: false`；中断的流可能没有最终统计。
 完整可运行示例：[sharing-client.py](../scripts/sharing-client.py)。
+
+长输出建议使用流式调用。默认服务端时限为 1800 秒（包含排队与生成），示例客户端设置为
+1860 秒。调用方若使用 300 秒 timeout，会在五分钟时先断开并失去该次结果；服务端通常记录为 499。
 
 ## 请求参数
 
@@ -142,7 +145,7 @@ Python SDK 通过 `model_extra` 访问扩展；使用严格 JSON schema 的客�
 ## 限流、错误与重试
 
 初始策略：同一 Key 身份同时一个生成请求，最多接纳五个请求，逐个执行；每分钟每个 Key 身份 30 次请求。
-请求体不超过 2 MiB；排队加处理最长十分钟。本地还有其他负载时，响应会更慢。
+请求体不超过 2 MiB；排队加处理默认最长三十分钟。本地还有其他负载时，响应会更慢。
 
 | HTTP 状态 | 如何处理 |
 | --- | --- |

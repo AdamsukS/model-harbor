@@ -8,7 +8,8 @@
 | 模型 ID | `{{MODEL}}`，也可以使用 `local-default` |
 | 鉴权 | `Authorization: Bearer <你的个人 Key>` |
 | 输出上限 | 每请求 `{{MAX_TOKENS}}` tokens；默认 `{{DEFAULT_TOKENS}}` |
-| 并发与频率 | 每 Key 身份最多 1 个生成请求；全服务最多接收 5 个并排队；每 Key 身份每分钟 30 次请求 |
+| 请求时限 | 服务端 `{{REQUEST_TIMEOUT_SECONDS}}` 秒；SDK 建议至少 `{{CLIENT_TIMEOUT_SECONDS}}` 秒 |
+| 并发与频率 | 每 Key 身份最多 1 个生成请求；全服务最多接收 5 个并排队；每 Key 身份每分钟 60 次请求 |
 
 你不需要服务器账号、SSH 或本地模型文件。收到 Key 后，把它保存到自己的 `OPENAI_API_KEY` 环境变量，
 不要写进代码仓库或共享截图。以下示例的模型别名会映射到上表中的实际模型。
@@ -33,7 +34,7 @@ from openai import OpenAI
 client = OpenAI(
     base_url="{{BASE_URL}}",
     api_key=os.environ["OPENAI_API_KEY"],
-    timeout=660,
+    timeout={{CLIENT_TIMEOUT_SECONDS}},
 )
 response = client.chat.completions.create(
     model="local-default",
@@ -56,6 +57,9 @@ print((response.model_extra or {}).get("inference"))
 流中断时可能收不到最终统计。
 
 ## 遇到问题
+
+长输出建议使用流式调用。客户端 timeout 必须大于服务端请求时限；若客户端先断开，服务端会记录
+499，且该次生成不会返回结果。单纯提高 `max_tokens` 不会自动提高客户端超时。
 
 - 401：Key 无效或被撤销，请联系给你 Key 的服务所有者。
 - 429：按 `Retry-After` 等待，减少并发，不要无限重试。

@@ -26,6 +26,7 @@ test('sharing setup is repeatable, keeps secrets private, validates templates, a
     const rendered = cli('render');
     expect(rendered.status, rendered.stderr).toBe(0);
     expect(readFileSync(join(state, 'generated/Caddyfile'), 'utf8')).toContain('api.example.com');
+    expect(readFileSync(join(state, 'generated/Caddyfile'), 'utf8')).toContain('response_header_timeout 1810s');
     const serverScript = readFileSync(join(state, 'generated/server-setup.sh'), 'utf8');
     expect(serverScript).not.toMatch(/PRIVATE KEY|sk-mh-/);
     expect(serverScript).toContain('MaxSessions 0');
@@ -48,6 +49,7 @@ test('sharing setup is repeatable, keeps secrets private, validates templates, a
     expect(guide).toContain('https://inference.example.net/v1');
     expect(guide).toContain('another-model');
     expect(guide).toContain('默认 `512`');
+    expect(guide).toContain('服务端 `1800` 秒；SDK 建议至少 `1860` 秒');
     expect(guide).not.toMatch(/\{\{|203\.0\.113\.10|modelharbor-tunnel|sk-mh-/);
     expect(statSync(guidePath).mode & 0o777).toBe(0o600);
     expect(handoff.stdout).not.toContain(config.domain);

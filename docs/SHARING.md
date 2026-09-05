@@ -54,6 +54,7 @@ Edit `sharing.local.json` in that directory. Start from [the example](../config/
 | `upstream` | Ollama HTTP origin, default `http://127.0.0.1:11434`. No embedded credentials. |
 | `port` | Loopback-only local gateway port, default 8788. |
 | `maxTokens` | Per-request output ceiling, default 16384. |
+| `timeoutSeconds` | Queue plus generation deadline, default 1800 seconds. Caddy receives a ten-second margin. |
 | `domain` | Your full API domain, e.g. `api.example.com`. |
 | `sshHost`, `sshPort` | Public server hostname/IP and SSH port. |
 | `sshUser` | A dedicated tunnel-only account; do not use root or an existing human account. |
@@ -144,7 +145,7 @@ from openai import OpenAI
 client = OpenAI(
     base_url=os.environ["OPENAI_BASE_URL"],  # https://api.example.com/v1
     api_key=os.environ["OPENAI_API_KEY"],
-    timeout=660,
+    timeout=1860,
 )
 response = client.chat.completions.create(
     model="local-default",
@@ -225,7 +226,9 @@ successful `[DONE]` response.
 - Five admitted requests, one per authenticated user, one backend generation at a time. Existing
   local workloads share the same Ollama, so overall device capacity is not increased.
 - 30 requests per minute per key identity; 429 responses include Retry-After.
-- 2 MiB request body, ten-minute request deadline including queueing.
+- 2 MiB request body, thirty-minute request deadline including queueing by default.
+- Clients must set their own timeout above the service deadline. A 300-second client timeout cancels
+  the request at five minutes even when the gateway and proxy are still waiting. Prefer streaming for long output.
 - Output default: min(1024, maxTokens); accepts `max_completion_tokens` as an alias for `max_tokens`.
 - One choice (`n=1`); text and function-call messages only. Image fetching is blocked at ingress.
 - Thinking defaults to `reasoning_effort: "none"`; callers can select a supported effort.

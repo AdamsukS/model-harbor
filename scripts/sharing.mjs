@@ -45,6 +45,7 @@ function config() {
     if (!Number.isInteger(c[name]) || c[name] < 1024 && name !== 'sshPort' || c[name] < 1 || c[name] > 65535) throw new Error(`Invalid ${name}.`);
   }
   if (typeof c.model !== 'string' || !c.model || !Number.isSafeInteger(c.maxTokens) || c.maxTokens < 1) throw new Error('Invalid model or maxTokens.');
+  if (c.timeoutSeconds !== undefined && (!Number.isSafeInteger(c.timeoutSeconds) || c.timeoutSeconds < 60 || c.timeoutSeconds > 86400)) throw new Error('timeoutSeconds must be an integer between 60 and 86400.');
   const upstream = new URL(c.upstream);
   if (!['http:', 'https:'].includes(upstream.protocol) || upstream.username || upstream.password || upstream.search || upstream.hash || upstream.pathname !== '/') throw new Error('upstream must be an HTTP origin without credentials.');
   if (!/^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$/.test(c.domain)) throw new Error('Invalid domain.');
@@ -55,6 +56,7 @@ function config() {
 }
 function render() {
   const c = config();
+  const timeoutSeconds = c.timeoutSeconds ?? 1800;
   const key = join(state, 'tunnel_ed25519');
   if (!existsSync(key)) run('ssh-keygen', ['-q', '-t', 'ed25519', '-N', '', '-C', 'modelharbor-tunnel', '-f', key]);
   const pub = readFileSync(key + '.pub', 'utf8').trim();
@@ -136,7 +138,7 @@ echo 'Restricted tunnel account ready. Add the generated Caddy site separately.'
             flush_interval 100ms
             transport http {
                 dial_timeout 5s
-                response_header_timeout 610s
+                response_header_timeout ${timeoutSeconds + 10}s
             }
         }
     }
@@ -189,7 +191,8 @@ try {
     const c = config();
     let guide = readFileSync(join(root, 'docs/templates/CLIENT_HANDOFF.md'), 'utf8');
     for (const [name, value] of Object.entries({ BASE_URL: `https://${c.domain}/v1`, MODEL: c.model,
-      MAX_TOKENS: c.maxTokens, DEFAULT_TOKENS: Math.min(1024, c.maxTokens) })) {
+      MAX_TOKENS: c.maxTokens, DEFAULT_TOKENS: Math.min(1024, c.maxTokens),
+      REQUEST_TIMEOUT_SECONDS: c.timeoutSeconds ?? 1800, CLIENT_TIMEOUT_SECONDS: (c.timeoutSeconds ?? 1800) + 60 })) {
       guide = guide.replaceAll(`{{${name}}}`, String(value));
     }
     const output = join(state, 'client-guide.local.md');
