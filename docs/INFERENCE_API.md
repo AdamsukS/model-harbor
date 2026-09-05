@@ -110,7 +110,7 @@ for chunk in stream:
 | `model` | 必填；配置的模型 ID 或 `local-default` |
 | `messages` | 非空数组；文本消息，也接受文本 content parts 和函数调用消息 |
 | `stream` | 布尔值；默认非流式 |
-| `max_tokens` / `max_completion_tokens` | 正整数，二选一；默认 min(1024, 所有者配置的上限)，初始上限 4096 |
+| `max_tokens` / `max_completion_tokens` | 正整数，二选一；默认 min(1024, 所有者配置的上限)，初始上限 16384 |
 | `temperature` | 0–2；未指定时使用后端默认值 |
 | `top_p` | 0–1；未指定时使用后端默认值 |
 | `seed` | 整数；不能据此保证跨模型 / 版本的绝对复现 |

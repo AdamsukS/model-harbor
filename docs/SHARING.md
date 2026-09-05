@@ -53,7 +53,7 @@ Edit `sharing.local.json` in that directory. Start from [the example](../config/
 | `model` | An installed Ollama model name; clients may also use `local-default`. |
 | `upstream` | Ollama HTTP origin, default `http://127.0.0.1:11434`. No embedded credentials. |
 | `port` | Loopback-only local gateway port, default 8788. |
-| `maxTokens` | Per-request output ceiling, default 4096. |
+| `maxTokens` | Per-request output ceiling, default 16384. |
 | `domain` | Your full API domain, e.g. `api.example.com`. |
 | `sshHost`, `sshPort` | Public server hostname/IP and SSH port. |
 | `sshUser` | A dedicated tunnel-only account; do not use root or an existing human account. |

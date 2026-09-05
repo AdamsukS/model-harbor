@@ -17,7 +17,7 @@ export interface Options {
 }
 
 const BODY_LIMIT = 2 * 1024 * 1024;
-const MAX_TOKENS = 4096;
+const MAX_TOKENS = 16384;
 export const hashKey = (key: string): string => createHash('sha256').update(key).digest('hex');
 const fault = (status: number, message: string) => Object.assign(new Error(message), { status });
 const object = (value: unknown): value is Record<string, unknown> =>

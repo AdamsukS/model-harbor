@@ -2,7 +2,7 @@
   "model": "qwen3.5:9b-128k",
   "upstream": "http://127.0.0.1:11434",
   "port": 8788,
-  "maxTokens": 4096,
+  "maxTokens": 16384,
   "domain": "api.example.com",
   "sshHost": "203.0.113.10",
   "sshPort": 22,
