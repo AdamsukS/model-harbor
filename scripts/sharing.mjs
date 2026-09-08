@@ -46,6 +46,13 @@ function config() {
   }
   if (typeof c.model !== 'string' || !c.model || !Number.isSafeInteger(c.maxTokens) || c.maxTokens < 1) throw new Error('Invalid model or maxTokens.');
   if (c.timeoutSeconds !== undefined && (!Number.isSafeInteger(c.timeoutSeconds) || c.timeoutSeconds < 60 || c.timeoutSeconds > 86400)) throw new Error('timeoutSeconds must be an integer between 60 and 86400.');
+  for (const name of ['concurrency', 'perKeyConcurrency']) {
+    if (c[name] !== undefined && (!Number.isSafeInteger(c[name]) || c[name] < 1 || c[name] > 8)) throw new Error(`${name} must be an integer between 1 and 8.`);
+  }
+  if (c.models !== undefined && (!c.models || typeof c.models !== 'object' || Array.isArray(c.models) ||
+    !Object.hasOwn(c.models, c.model) || Object.entries(c.models).some(([name, context]) =>
+      !name || !Number.isSafeInteger(context) || context < 1))) throw new Error('Invalid model profiles.');
+  if (c.backend !== undefined && !['ollama', 'llama.cpp'].includes(c.backend)) throw new Error('backend must be ollama or llama.cpp.');
   const upstream = new URL(c.upstream);
   if (!['http:', 'https:'].includes(upstream.protocol) || upstream.username || upstream.password || upstream.search || upstream.hash || upstream.pathname !== '/') throw new Error('upstream must be an HTTP origin without credentials.');
   if (!/^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$/.test(c.domain)) throw new Error('Invalid domain.');
@@ -160,6 +167,7 @@ echo 'Restricted tunnel account ready. Add the generated Caddy site separately.'
 <key>EnvironmentVariables</key><dict><key>INFERENCE_STATE_DIR</key><string>${xml(state)}</string></dict>
 <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
 <key>ThrottleInterval</key><integer>10</integer><key>Umask</key><integer>63</integer>
+<key>ExitTimeOut</key><integer>${timeoutSeconds + 10}</integer>
 <key>StandardOutPath</key><string>${xml(join(state, 'logs', label + '.stdout.log'))}</string>
 <key>StandardErrorPath</key><string>${xml(join(state, 'logs', label + '.stderr.log'))}</string>
 </dict></plist>
@@ -191,6 +199,8 @@ try {
     const c = config();
     let guide = readFileSync(join(root, 'docs/templates/CLIENT_HANDOFF.md'), 'utf8');
     for (const [name, value] of Object.entries({ BASE_URL: `https://${c.domain}/v1`, MODEL: c.model,
+      MODEL_CHOICES: c.models ? Object.entries(c.models).map(([id, context]) => `\`${id}\`（${context} tokens）`).join('；') : `\`${c.model}\``,
+      PER_KEY_INFLIGHT: c.perKeyConcurrency ?? 1, TOTAL_INFLIGHT: Math.max(5, c.concurrency ?? 1),
       MAX_TOKENS: c.maxTokens, DEFAULT_TOKENS: Math.min(1024, c.maxTokens),
       REQUEST_TIMEOUT_SECONDS: c.timeoutSeconds ?? 1800, CLIENT_TIMEOUT_SECONDS: (c.timeoutSeconds ?? 1800) + 60 })) {
       guide = guide.replaceAll(`{{${name}}}`, String(value));
@@ -203,9 +213,9 @@ try {
     if (process.platform !== 'darwin') throw new Error('install-macos requires macOS.');
     config();
     // No implicit build: use the repository's pinned Node/pnpm build first.
-    for (const file of ['inference-gateway.js', 'admission-queue.js']) {
-      copyFileSync(join(root, 'dist/src', file), join(state, file));
-    }
+    const bundle = join(root, 'dist/inference/inference-gateway.js');
+    if (!existsSync(bundle)) throw new Error('Run pnpm build:inference before installing the gateway.');
+    copyFileSync(bundle, join(state, 'inference-gateway.js'));
     render();
     const target = join(homedir(), 'Library/LaunchAgents');
     mkdirSync(target, { recursive: true });

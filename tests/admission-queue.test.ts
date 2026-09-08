@@ -10,6 +10,25 @@ function deferred<T>() {
 }
 
 describe('AdmissionQueue', () => {
+  it('removes cancelled waiters immediately and preserves another request from the same user', async () => {
+    const queue = new AdmissionQueue({ concurrency: 1, queueSize: 2, maxUsers: 2 });
+    const gate = deferred<void>();
+    const first = queue.run('same-user', () => gate.promise);
+    const controller = new AbortController();
+    let ran = false;
+    const second = queue.run('same-user', async () => { ran = true; }, controller.signal);
+    const rejected = expect(second).rejects.toThrow('cancelled');
+    controller.abort(new Error('cancelled'));
+    await rejected;
+    expect(queue.snapshot()).toEqual({ active: 1, queued: 0, admittedUsers: 1 });
+    await expect(queue.run('other', async () => undefined, controller.signal)).rejects.toThrow('cancelled');
+    const third = queue.run('other', async () => 'accepted');
+    gate.resolve();
+    await expect(third).resolves.toBe('accepted');
+    await first;
+    expect(ran).toBe(false);
+  });
+
   it('runs one operation at a time in FIFO order', async () => {
     const queue = new AdmissionQueue({ concurrency: 1, queueSize: 5, maxUsers: 5 });
     const firstGate = deferred<string>();

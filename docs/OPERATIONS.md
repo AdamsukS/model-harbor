@@ -108,6 +108,9 @@ MODEL_HARBOR_CONTEXT_TOKENS=131072
 MODEL_HARBOR_CONTEXT_CHARACTERS=360000
 OLLAMA_MODEL=qwen3.5:9b-128k
 OLLAMA_KV_CACHE_TYPE=q4_0
+OLLAMA_NUM_PARALLEL=1
+LLAMA_ARG_CACHE_RAM=512
+LLAMA_ARG_CTX_CHECKPOINTS=4
 OLLAMA_THINKING=false
 PLASMOD_TOP_K=5
 PLASMOD_REPLAY_ON_START=1
@@ -115,6 +118,14 @@ PLASMOD_REPLAY_ON_START=1
 
 The application rejects `MODEL_HARBOR_MAX_USERS` above five. Restart ModelHarbor after changing
 application settings; restart Ollama after changing its process-level KV or parallelism settings.
+`scripts/start-ollama.sh` honors `OLLAMA_NUM_PARALLEL` (default 1). The two `LLAMA_ARG_` settings
+bound llama-server's reusable prompt snapshots and per-slot checkpoints; they do not shorten the
+model context or change its weights. These controls were verified with Ollama 0.33.2's llama-server.
+For a separately installed sharing LaunchAgent, set the same environment in its Ollama plist;
+the project `.env` does not configure an already-running external process.
+Ollama 0.33.2 forces Qwen3.5 (`qwen35`) to one slot even if `OLLAMA_NUM_PARALLEL` is larger.
+See the [M4 concurrency experiment](inference-concurrency.md) before treating a configured value as
+effective inference concurrency.
 Thinking is off by default to keep a five-user queue responsive; opt in per deployment through the
 environment when an experiment needs explicit reasoning tokens.
 
@@ -146,3 +157,19 @@ commits while dirty.
 First reduce the per-request context in a local `.env`, keep one parallel generation, and inspect
 macOS memory pressure. Do not increase concurrent model slots. The next optimization step is direct
 llama.cpp KV measurement, not silently dropping memory isolation or Plasmod durability.
+
+### Native inference sharing profiles
+
+The installed public service can use llama.cpp separately from the Ollama application runtime.
+See [measured concurrency and deployment settings](inference-concurrency.md).
+`scripts/start-llama.sh` starts the native router from `INFERENCE_STATE_DIR/llama-models.ini` with
+`LLAMA_SERVER_BIN` pointing to the installed binary. `--models-max 1` keeps a single model instance
+resident; a request for a different context preset waits for active work to finish before reloading.
+The gateway's optional `models` map advertises and permits only configured presets.
+
+Ollama 0.33.2 bundles a binary with `LLAMA_SUBPROCESS=OFF`. The unmodified upstream release also
+cannot load this Ollama GGUF directly: its metadata and tensor layout need Ollama's compatibility
+layer. Build the pinned llama.cpp source with the existing Ollama compatibility layer and enable
+`LLAMA_SUBPROCESS` for router mode. The original model blob remains unchanged.
+Keep launch scripts and executables under the installed Application Support state directory;
+macOS may deny a LaunchAgent access to scripts inside Downloads.

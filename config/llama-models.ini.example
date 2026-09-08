@@ -1,0 +1,27 @@
+version = 1
+
+; Build llama.cpp b10630 with Ollama 0.33.2 compatibility and LLAMA_SUBPROCESS=ON.
+; One preset is resident at a time when started with --models-max 1.
+[*]
+model = /absolute/path/to/model.gguf
+n-gpu-layers = 99
+cache-type-k = q4_0
+cache-type-v = q4_0
+flash-attn = on
+cache-ram = 512
+ctx-checkpoints = 4
+load-mode = none
+jinja = true
+reasoning = auto
+no-context-shift = true
+
+[qwen3.5-9b-32k]
+alias = qwen3.5:9b-32k
+ctx-size = 98304
+parallel = 3
+load-on-startup = true
+
+[qwen3.5-9b-128k]
+alias = qwen3.5:9b-128k
+ctx-size = 262144
+parallel = 2

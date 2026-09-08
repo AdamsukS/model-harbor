@@ -27,6 +27,7 @@ interface QueuedOperation<T> {
   operation: () => Promise<T>;
   resolve: (value: T | PromiseLike<T>) => void;
   reject: (reason?: unknown) => void;
+  cleanup?: () => void;
 }
 
 export class AdmissionQueue {
@@ -42,7 +43,8 @@ export class AdmissionQueue {
     }
   }
 
-  run<T>(userId: string, operation: () => Promise<T>): Promise<T> {
+  run<T>(userId: string, operation: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    if (signal?.aborted) return Promise.reject(signal.reason);
     const normalizedUserId = userId.trim();
     if (!normalizedUserId) return Promise.reject(new Error('userId must not be empty.'));
     if (this.active + this.pending.length >= this.options.queueSize) {
@@ -59,12 +61,25 @@ export class AdmissionQueue {
       (this.userOperations.get(normalizedUserId) ?? 0) + 1
     );
     const result = new Promise<T>((resolve, reject) => {
-      this.pending.push({
+      const entry = {
         userId: normalizedUserId,
         operation,
         resolve,
         reject,
-      } as QueuedOperation<unknown>);
+      } as QueuedOperation<unknown>;
+      if (signal) {
+        const abort = () => {
+          const index = this.pending.indexOf(entry);
+          if (index < 0) return;
+          this.pending.splice(index, 1);
+          entry.cleanup?.();
+          this.releaseUser(normalizedUserId);
+          reject(signal.reason);
+        };
+        signal.addEventListener('abort', abort, { once: true });
+        entry.cleanup = () => signal.removeEventListener('abort', abort);
+      }
+      this.pending.push(entry);
     });
     this.pump();
     return result;
@@ -82,17 +97,22 @@ export class AdmissionQueue {
     while (this.active < this.options.concurrency) {
       const next = this.pending.shift();
       if (!next) return;
+      next.cleanup?.();
       this.active += 1;
       void Promise.resolve()
         .then(next.operation)
         .then(next.resolve, next.reject)
         .finally(() => {
           this.active -= 1;
-          const remaining = (this.userOperations.get(next.userId) ?? 1) - 1;
-          if (remaining === 0) this.userOperations.delete(next.userId);
-          else this.userOperations.set(next.userId, remaining);
+          this.releaseUser(next.userId);
           this.pump();
         });
     }
+  }
+
+  private releaseUser(userId: string): void {
+    const remaining = (this.userOperations.get(userId) ?? 1) - 1;
+    if (remaining === 0) this.userOperations.delete(userId);
+    else this.userOperations.set(userId, remaining);
   }
 }

@@ -6,13 +6,17 @@
 | --- | --- |
 | Base URL | `{{BASE_URL}}` |
 | 模型 ID | `{{MODEL}}`，也可以使用 `local-default` |
+| 可选型号 / 窗口 | {{MODEL_CHOICES}} |
 | 鉴权 | `Authorization: Bearer <你的个人 Key>` |
 | 输出上限 | 每请求 `{{MAX_TOKENS}}` tokens；默认 `{{DEFAULT_TOKENS}}` |
 | 请求时限 | 服务端 `{{REQUEST_TIMEOUT_SECONDS}}` 秒；SDK 建议至少 `{{CLIENT_TIMEOUT_SECONDS}}` 秒 |
-| 并发与频率 | 每 Key 身份最多 1 个生成请求；全服务最多接收 5 个并排队；每 Key 身份每分钟 60 次请求 |
+| 并发与频率 | 每 Key 身份最多 {{PER_KEY_INFLIGHT}} 个在途请求；全服务最多接收 {{TOTAL_INFLIGHT}} 个；每 Key 身份每分钟 60 次请求 |
 
 你不需要服务器账号、SSH 或本地模型文件。收到 Key 后，把它保存到自己的 `OPENAI_API_KEY` 环境变量，
 不要写进代码仓库或共享截图。以下示例的模型别名会映射到上表中的实际模型。
+将请求的 `model` 改为可选型号即可选择窗口，窗口包含输入、聊天模板和实际输出。
+实际同时生成的数量由后端槽位决定，其余在途请求排队。使用多档路由时，换档会等待当前请求
+结束并重新加载模型；同批任务尽量选同一档。
 
 ## 快速调用
 

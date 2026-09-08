@@ -6,7 +6,7 @@ For collaborators using an existing service, see the [inference API reference](I
 For operators, see [provider-independent deployment and migration](DEPLOYMENT.md).
 This design needs public DNS, HTTPS and SSH, not an account or SDK from any particular cloud provider.
 
-This optional gateway exposes a local Ollama model through **OpenAI-compatible Chat Completions**.
+This optional gateway exposes a local Ollama or llama.cpp model through **OpenAI-compatible Chat Completions**.
 It supports `GET /v1/models`, text `POST /v1/chat/completions`, SSE streaming, and function-call
 messages. It does not execute tools or expose the Agent UI, memory, model-management endpoints,
 Responses, embeddings, or image inputs. Compatibility is with this API subset, not every OpenAI feature.
@@ -50,11 +50,15 @@ Edit `sharing.local.json` in that directory. Start from [the example](../config/
 
 | Setting | Meaning |
 | --- | --- |
-| `model` | An installed Ollama model name; clients may also use `local-default`. |
-| `upstream` | Ollama HTTP origin, default `http://127.0.0.1:11434`. No embedded credentials. |
+| `model` | The default backend model name; clients may also use `local-default`. |
+| `upstream` | Inference HTTP origin, default `http://127.0.0.1:11434`. No embedded credentials. |
+| `models` | Optional map of allowed model names to their actual backend context-window sizes. Must include `model`; routes each name unchanged. Configure matching llama.cpp presets. |
+| `backend` | `ollama` (default) or `llama.cpp`. The latter supplies an explicit object schema for bare `json_object` response format. |
 | `port` | Loopback-only local gateway port, default 8788. |
 | `maxTokens` | Per-request output ceiling, default 16384. |
 | `timeoutSeconds` | Queue plus generation deadline, default 1800 seconds. Caddy receives a ten-second margin. |
+| `concurrency` | Simultaneous backend requests, 1–8; default 1. Match measured backend capacity. |
+| `perKeyConcurrency` | In-flight requests per authenticated user, 1–8; default 1. Set 2 to allow one running plus one queued request on a single-slot backend. |
 | `domain` | Your full API domain, e.g. `api.example.com`. |
 | `sshHost`, `sshPort` | Public server hostname/IP and SSH port. |
 | `sshUser` | A dedicated tunnel-only account; do not use root or an existing human account. |
@@ -103,6 +107,7 @@ upstream address must be reachable from that container. Keep the Docker network'
 On macOS:
 
 ```bash
+pnpm build:inference
 pnpm sharing install-macos
 ```
 
@@ -223,15 +228,23 @@ successful `[DONE]` response.
 
 ## Limits and private operations
 
-- Five admitted requests, one per authenticated user, one backend generation at a time. Existing
-  local workloads share the same Ollama, so overall device capacity is not increased.
-- 30 requests per minute per key identity; 429 responses include Retry-After.
+- At most max(5, concurrency) admitted requests, up to eight; five distinct admitted users. Per-user admission
+  and backend forwarding concurrency default to one. Physical inference slots are configured in the backend.
+- 60 requests per minute per key identity; 429 responses include Retry-After.
 - 2 MiB request body, thirty-minute request deadline including queueing by default.
+- Upstream HTTP uses the same deadline, including the wait for response headers; Node fetch's
+  independent five-minute timeout does not apply. Cancelled waiters immediately release queue capacity.
+- Access logs record `upstream_status` and transport `error_code` without backend error bodies.
 - Clients must set their own timeout above the service deadline. A 300-second client timeout cancels
   the request at five minutes even when the gateway and proxy are still waiting. Prefer streaming for long output.
 - Output default: min(1024, maxTokens); accepts `max_completion_tokens` as an alias for `max_tokens`.
 - One choice (`n=1`); text and function-call messages only. Image fetching is blocked at ingress.
 - Thinking defaults to `reasoning_effort: "none"`; callers can select a supported effort.
+
+Increasing gateway concurrency alone does not add Ollama inference slots. On a 16 GiB machine
+serving a 128K model, first measure a shorter-context profile with two backend slots before enabling
+parallel generation. Keep model, prompt, output length, and thinking settings identical when comparing
+direct and public API latency; streaming improves time to first visible token, not generation speed.
 
 ```bash
 pnpm sharing status                 # Users/status only, never key values
@@ -290,3 +303,5 @@ References: [Ollama compatibility](https://docs.ollama.com/api/openai-compatibil
 6. 每位协作者只需 Base URL、模型名和自己的 Key。返回保留标准 `usage`，并用 `inference` 提供参数及耗时。
 
 当前兼容文本 Chat Completions，并不等同于完整 OpenAI API。API Key 和密码不要粘贴到仓库、Issue 或 PR。
+
+Gateway updates require `pnpm build:inference` (also included in `pnpm build`); `install-macos` deploys the standalone bundle from `dist/inference`. Drain active requests before reinstalling services.

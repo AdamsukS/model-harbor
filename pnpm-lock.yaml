@@ -23,6 +23,9 @@ importers:
       '@codesoul-co/hypha-tools':
         specifier: 1.0.1
         version: 1.0.1
+      ajv:
+        specifier: ^8.20.0
+        version: 8.20.0
       react:
         specifier: 19.1.1
         version: 19.1.1

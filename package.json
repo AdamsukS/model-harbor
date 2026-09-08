@@ -10,7 +10,7 @@
   "scripts": {
     "sharing": "node scripts/sharing.mjs",
     "start:inference": "node dist/src/inference-gateway.js",
-    "build": "tsc -p tsconfig.json && vite build",
+    "build": "tsc -p tsconfig.json && vite build && node scripts/build-inference.mjs",
     "build:web": "vite build",
     "dev": "tsx src/main.ts",
     "dev:web": "vite --host 127.0.0.1",
@@ -24,7 +24,8 @@
     "tools:check-web": "tsx scripts/check-web-search.ts",
     "stop": "bash scripts/stop.sh",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p web/tsconfig.json --noEmit",
+    "build:inference": "node scripts/build-inference.mjs"
   },
   "dependencies": {
     "@codesoul-co/hypha-core": "1.0.1",
@@ -32,6 +33,7 @@
     "@codesoul-co/hypha-mcp": "1.0.1",
     "@codesoul-co/hypha-memory": "1.0.1",
     "@codesoul-co/hypha-tools": "1.0.1",
+    "ajv": "^8.20.0",
     "react": "19.1.1",
     "react-dom": "19.1.1"
   },
