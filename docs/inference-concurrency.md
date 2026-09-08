@@ -189,6 +189,8 @@ python3 scripts/test-native-proxy-cancel.py /path/to/build
 取消回归测试链接实际构建的原生路由库，使用本机假 HTTP 后端，不加载模型。
 它分别让后端不发响应头、发头后不发正文，取消代理并保持测试进程存活，
 断言后端连接在1秒内关闭。原版两项均失败，补丁后两项均通过。
+另在共享响应队列中持续发送其他任务通知，验证1秒轮询期限不被重置；
+原版实际4.099秒，改为固定截止时间后1.005秒。
 
 `com.codesoul.modelharbor.llama` LaunchAgent 管理常驻原生后端；原 Ollama LaunchAgent
 已 bootout 并 disable，防止两套服务同时加载模型。网关与隧道继续使用原 LaunchAgents。

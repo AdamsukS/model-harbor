@@ -176,3 +176,9 @@ Run `python3 scripts/test-native-proxy-cancel.py /path/to/build` against the bui
 The original model blob remains unchanged.
 Keep launch scripts and executables under the installed Application Support state directory;
 macOS may deny a LaunchAgent access to scripts inside Downloads.
+
+Before single-instance maintenance, stop new inference admissions at the public entry with a
+retryable maintenance response, then wait for the gateway's `service.queue.active` and
+`service.queue.queued` to reach zero. Restart only after draining, check both backend and gateway,
+then restore the entry. On the deployed Mac, launchd clamps the shutdown grace to 60 seconds even
+when the plist requests 1810; SIGTERM alone cannot preserve every 30-minute request.

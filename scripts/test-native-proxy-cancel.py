@@ -65,3 +65,5 @@ with tempfile.TemporaryDirectory(prefix='native-proxy-cancel-') as directory:
                         'upstream_closed_within_1s': early, 'process_still_alive': alive})
     print(json.dumps(results, indent=2))
     assert all(row['upstream_closed_within_1s'] and row['process_still_alive'] for row in results)
+    # Other tasks continually notify this shared queue; they must not reset our deadline.
+    subprocess.run([str(binary), 'poll'], check=True, timeout=8)

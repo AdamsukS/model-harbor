@@ -1,8 +1,6 @@
 --- a/tools/server/server-models.cpp
 +++ b/tools/server/server-models.cpp
-@@ -2407,9 +2407,11 @@
-     cli->set_write_timeout(timeout_read, 0); // reversed for cli (client) vs srv (server)
-     cli->set_read_timeout(timeout_write, 0);
+@@ -2409,5 +2409,7 @@
      this->status = 500; // to be overwritten upon response
 -    this->cleanup_pipes = [pipe]() {
 +    this->cleanup_pipes = [pipe, cli]() {
@@ -11,5 +9,14 @@
 +        // Cancellation must also interrupt a child request waiting for headers or body.
 +        cli->stop();
      };
+--- a/tools/server/server-queue.cpp
++++ b/tools/server/server-queue.cpp
+@@ -450,2 +450,3 @@
+ server_task_result_ptr server_response::recv_with_timeout(const std::unordered_set<int> & id_tasks, int timeout) {
++    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(timeout);
+     while (true) {
+@@ -461,3 +462,3 @@
  
-     // wire up the receive end of the pipe
+-        std::cv_status cr_res = condition_results.wait_for(lock, std::chrono::seconds(timeout));
++        std::cv_status cr_res = condition_results.wait_until(lock, deadline);
+         if (!running) {

@@ -167,7 +167,7 @@ echo 'Restricted tunnel account ready. Add the generated Caddy site separately.'
 <key>EnvironmentVariables</key><dict><key>INFERENCE_STATE_DIR</key><string>${xml(state)}</string></dict>
 <key>RunAtLoad</key><true/><key>KeepAlive</key><true/>
 <key>ThrottleInterval</key><integer>10</integer><key>Umask</key><integer>63</integer>
-<key>ExitTimeOut</key><integer>${timeoutSeconds + 10}</integer>
+<key>ExitTimeOut</key><integer>${Math.min(timeoutSeconds + 10, 60)}</integer>
 <key>StandardOutPath</key><string>${xml(join(state, 'logs', label + '.stdout.log'))}</string>
 <key>StandardErrorPath</key><string>${xml(join(state, 'logs', label + '.stderr.log'))}</string>
 </dict></plist>
