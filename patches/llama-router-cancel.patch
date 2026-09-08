@@ -1,0 +1,15 @@
+--- a/tools/server/server-models.cpp
++++ b/tools/server/server-models.cpp
+@@ -2407,9 +2407,11 @@
+     cli->set_write_timeout(timeout_read, 0); // reversed for cli (client) vs srv (server)
+     cli->set_read_timeout(timeout_write, 0);
+     this->status = 500; // to be overwritten upon response
+-    this->cleanup_pipes = [pipe]() {
++    this->cleanup_pipes = [pipe, cli]() {
+         pipe->close_read();
+         pipe->close_write();
++        // Cancellation must also interrupt a child request waiting for headers or body.
++        cli->stop();
+     };
+ 
+     // wire up the receive end of the pipe

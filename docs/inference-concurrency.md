@@ -162,8 +162,9 @@ Ollama 0.33.2 的 `llama/server/CMakeLists.txt` 强制 `LLAMA_SUBPROCESS=OFF`，
 除了 RoPE metadata 长度差异，还需要 tensor 命名与布局兼容层。
 实验性的 metadata 副本没有投入生产，原始 GGUF 未修改。
 
-常驻二进制由以下固定来源构建，沿用 Ollama 已有兼容层，只将其构建文件中的
-`set(LLAMA_SUBPROCESS OFF CACHE BOOL "" FORCE)` 改为 `ON`：
+常驻二进制由以下固定来源构建，沿用 Ollama 已有兼容层，将其构建文件中的
+`set(LLAMA_SUBPROCESS OFF CACHE BOOL "" FORCE)` 改为 `ON`。另应用
+`patches/llama-router-cancel.patch`，使路由请求取消时关闭到模型进程的 HTTP 连接：
 
 - [Ollama v0.33.2 构建配置](https://github.com/ollama/ollama/blob/v0.33.2/llama/server/CMakeLists.txt)，提交 `f96e7aa0513b9973a0ccc71be414c2ecb9d65b1a`。
 - [Ollama 模型兼容层说明](https://github.com/ollama/ollama/blob/v0.33.2/llama/compat/README.md)。
@@ -176,12 +177,18 @@ Ollama 0.33.2 的 `llama/server/CMakeLists.txt` 强制 `LLAMA_SUBPROCESS=OFF`，
 将 Ollama tar 中的 `llama/`、`cmake/`、`LLAMA_CPP_VERSION` 解包，并提供固定 llama.cpp 源码后：
 
 ```sh
+git -C /path/to/llama.cpp-d222767c7 apply /path/to/model-harbor/patches/llama-router-cancel.patch
 cmake -S /path/to/ollama-0.33.2/llama/server -B /path/to/build \
   -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
   -DFETCHCONTENT_SOURCE_DIR_LLAMA_CPP=/path/to/llama.cpp-d222767c7 \
   -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON -DGGML_NATIVE=ON
 cmake --build /path/to/build --target llama-server -j 4
+python3 scripts/test-native-proxy-cancel.py /path/to/build
 ```
+
+取消回归测试链接实际构建的原生路由库，使用本机假 HTTP 后端，不加载模型。
+它分别让后端不发响应头、发头后不发正文，取消代理并保持测试进程存活，
+断言后端连接在1秒内关闭。原版两项均失败，补丁后两项均通过。
 
 `com.codesoul.modelharbor.llama` LaunchAgent 管理常驻原生后端；原 Ollama LaunchAgent
 已 bootout 并 disable，防止两套服务同时加载模型。网关与隧道继续使用原 LaunchAgents。

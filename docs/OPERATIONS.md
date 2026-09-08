@@ -170,6 +170,9 @@ The gateway's optional `models` map advertises and permits only configured prese
 Ollama 0.33.2 bundles a binary with `LLAMA_SUBPROCESS=OFF`. The unmodified upstream release also
 cannot load this Ollama GGUF directly: its metadata and tensor layout need Ollama's compatibility
 layer. Build the pinned llama.cpp source with the existing Ollama compatibility layer and enable
-`LLAMA_SUBPROCESS` for router mode. The original model blob remains unchanged.
+`LLAMA_SUBPROCESS` for router mode. Apply `patches/llama-router-cancel.patch` so cancelled
+requests close their child HTTP connection, including while waiting for non-streaming output.
+Run `python3 scripts/test-native-proxy-cancel.py /path/to/build` against the built libraries.
+The original model blob remains unchanged.
 Keep launch scripts and executables under the installed Application Support state directory;
 macOS may deny a LaunchAgent access to scripts inside Downloads.
