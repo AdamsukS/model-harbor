@@ -20,7 +20,10 @@ const send = (lane, index) => new Promise(resolve => {
   const body = { model: 'qwen3.5:9b-32k', stream: false, temperature: 0, max_tokens: long ? 8192 : 1024,
     messages: [{ role: 'user', content: 'Return the requested JSON array of zeros.' }],
     response_format: { type: 'json_schema', json_schema: { name: 'soak', strict: true,
-      schema: { type: 'array', minItems: long ? 3600 : 300, maxItems: long ? 3600 : 300, items: { enum: [0] } } } } };
+      // Native grammar caps a single repetition; use rows instead of one 3600-item rule.
+      schema: long ? { type: 'array', minItems: 60, maxItems: 60,
+        items: { type: 'array', minItems: 60, maxItems: 60, items: { enum: [0] } } }
+        : { type: 'array', minItems: 300, maxItems: 300, items: { enum: [0] } } } } };
   const req = http.request('http://127.0.0.1:8788/v1/chat/completions', { method: 'POST',
     headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }, timeout: 1860000 }, res => {
     const chunks = [];
@@ -60,6 +63,7 @@ record({ event: 'waiting_for_idle', pid: process.pid, hours, long_attempts: long
       const result = await send(lane, count++);
       failures = result.status === 200 ? 0 : failures + 1;
       if (failures >= 3) { stopping = true; record({ event: 'stopped_after_repeated_failure', lane }); }
+      if (result.status === 400) { stopping = true; record({ event: 'stopped_invalid_test_request', lane }); }
       if (result.status !== 200) await new Promise(r => setTimeout(r, 10000));
     }
   }));
