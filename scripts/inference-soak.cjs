@@ -17,7 +17,7 @@ const record = value => fs.appendFileSync(out, JSON.stringify({ time: new Date()
 for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => { stopping = true; for (const req of live) req.destroy(); });
 const send = (lane, index) => new Promise(resolve => {
   const long = index < longAttempts, begin = Date.now();
-  const body = { model: 'qwen3.5:9b-32k', stream: false, temperature: 0, max_tokens: long ? 8192 : 1024,
+  const body = { model: 'qwen3.5:9b-32k', stream: false, temperature: 0, max_tokens: long ? 16384 : 1024,
     messages: [{ role: 'user', content: 'Return the requested JSON array of zeros.' }],
     response_format: { type: 'json_schema', json_schema: { name: 'soak', strict: true,
       // Native grammar caps a single repetition; use rows instead of one 3600-item rule.

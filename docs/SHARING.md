@@ -305,3 +305,19 @@ References: [Ollama compatibility](https://docs.ollama.com/api/openai-compatibil
 当前兼容文本 Chat Completions，并不等同于完整 OpenAI API。API Key 和密码不要粘贴到仓库、Issue 或 PR。
 
 Gateway updates require `pnpm build:inference` (also included in `pnpm build`); `install-macos` deploys the standalone bundle from `dist/inference`. Drain active requests before reinstalling services.
+
+### Reloading a proxy with a single-file Docker bind mount
+
+Replacing a host Caddyfile atomically can leave a running container reading the previous inode.
+A correct host file does not prove the container or Caddy's active configuration has been updated.
+For a containerized proxy, run the following on its host after merging the intended site changes:
+
+```sh
+./scripts/reload-inference-proxy.sh YOUR_CADDY_CONTAINER /absolute/host/path/to/Caddyfile
+```
+
+The script validates and hot-reloads the same private host-side snapshot through stdin, avoiding
+an outdated bind-mounted file. It does not restart the container. Check Caddy's active admin
+configuration afterwards, and test a new request: in-flight requests may retain their original
+transport timeout. Until the container is recreated/restarted with the current host inode, use this
+host-snapshot reload command rather than reloading the stale container file.
